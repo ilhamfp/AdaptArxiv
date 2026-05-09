@@ -4,8 +4,56 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { DiamondButton } from "@/components/ui/diamond-button";
+import { cn } from "@/lib/utils";
 
-const EASE: [number, number, number, number] = [0.19, 1, 0.22, 1];
+// ease-out-quad — Structured Money's signature easing for hero cadence
+const EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+
+/**
+ * Per-letter clip-reveal helper. Each letter sits in an inline-block span and
+ * animates `y: 110% → 0%` with a per-letter stagger inside an overflow-hidden
+ * line. Mirrors how Structured Money's c-splitted-text component reveals the
+ * hero title (50ms per letter at base delay 0.2s).
+ */
+function SplitLine({
+  text,
+  baseDelay,
+  letterStagger = 0.05,
+  duration = 0.6,
+  className,
+  italic = false,
+}: {
+  text: string;
+  baseDelay: number;
+  letterStagger?: number;
+  duration?: number;
+  className?: string;
+  italic?: boolean;
+}) {
+  const letters = Array.from(text);
+  const Wrapper = italic ? motion.em : motion.span;
+  return (
+    <Wrapper className={cn("block overflow-hidden whitespace-nowrap", className)}>
+      {letters.map((char, i) => (
+        <motion.span
+          key={i}
+          className="inline-block align-bottom"
+          initial={{ y: "110%" }}
+          animate={{ y: "0%" }}
+          transition={{
+            duration,
+            delay: baseDelay + i * letterStagger,
+            ease: EASE,
+          }}
+        >
+          {char === " " ? " " : char}
+        </motion.span>
+      ))}
+    </Wrapper>
+  );
+}
+
+const METRICS = ["F1: 0.79", "·", "Indonesian sentiment"];
 
 export function LandingHero() {
   return (
@@ -13,56 +61,69 @@ export function LandingHero() {
       id="main"
       className="relative h-dvh w-full overflow-hidden bg-dust text-black"
     >
-      {/* Header — z-40 */}
-      <motion.header
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: EASE }}
-        className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-5 py-5 sm:px-10"
-      >
-        <span
+      {/* Header — z-40 — items slide in from opposite edges (0–0.5s) */}
+      <header className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-5 py-5 sm:px-10">
+        <motion.span
           translate="no"
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
           className="c-heading-xs font-serif text-black"
         >
           AdaptArxiv
-        </span>
-        <Link
-          href="/dashboard"
-          className="c-link uppercase tracking-widest text-black hover:text-black/60 transition-colors duration-[var(--transition-duration)] ease-[var(--ease-out-quad)]"
+        </motion.span>
+        <motion.div
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
         >
-          Dashboard
-        </Link>
-      </motion.header>
+          <Link
+            href="/dashboard"
+            className="c-link uppercase tracking-widest text-black hover:text-black/60 transition-colors duration-[var(--transition-duration)] ease-[var(--ease-out-quad)]"
+          >
+            Dashboard
+          </Link>
+        </motion.div>
+      </header>
 
       {/* Centered hero — z-30 */}
       <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-4 -translate-y-[8vh]">
-        <motion.h1
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.2, ease: EASE }}
-          className="c-heading-lg c-italic-no-uppercase text-black max-w-[20ch] leading-[1.05]"
-        >
-          <span className="block">Real research,</span>
-          <em className="block c-italic-emphasis">structured</em>
-        </motion.h1>
+        {/* Title: line 1 letters at t=0.20s, italic line 2 letters at t=0.95s (ceremonial pause) */}
+        <h1 className="c-heading-lg c-italic-no-uppercase text-black max-w-[20ch] leading-[1.1]">
+          <SplitLine text="Real research," baseDelay={0.2} />
+          <SplitLine
+            text="structured"
+            baseDelay={0.95}
+            italic
+            className="c-italic-emphasis"
+          />
+        </h1>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.65, ease: EASE }}
-          className="mt-7 flex items-center gap-x-5 c-body-sm tracking-[0.18em] uppercase text-black/75 tabular-nums"
-        >
-          <span>F1: 0.79</span>
-          <span aria-hidden className="text-black/35">
-            ·
-          </span>
-          <span>Indonesian sentiment</span>
-        </motion.div>
+        {/* Metrics row: per-word fade-up (0.20–0.90s) */}
+        <div className="mt-7 flex items-center gap-x-5 c-body-sm tracking-[0.18em] uppercase text-black/75 tabular-nums">
+          {METRICS.map((word, i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 0.6,
+                delay: 0.2 + i * 0.1,
+                ease: EASE,
+              }}
+              className={cn(i === 1 && "text-black/35")}
+              aria-hidden={i === 1 || undefined}
+            >
+              {word}
+            </motion.span>
+          ))}
+        </div>
 
+        {/* CTA — lands as title finishes its visual heavy beat (0.85–1.45s) */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.9, ease: EASE }}
+          transition={{ duration: 0.6, delay: 0.85, ease: EASE }}
           className="mt-9"
         >
           <DiamondButton href="/dashboard" variant="primary">
@@ -71,17 +132,17 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      {/* Wordmark — SVG that fits viewport width, slight bottom-edge crop */}
-      <motion.div
+      {/* Wordmark — slides up from below over 1.0s, delayed 0.35s. Matches Structured's bottom-logo cadence. */}
+      <div
         translate="no"
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.2, delay: 0.4, ease: EASE }}
         className="absolute inset-x-0 bottom-0 z-10 translate-y-[12%] pointer-events-none"
       >
-        <svg
+        <motion.svg
           viewBox="0 0 1440 240"
           preserveAspectRatio="xMidYEnd meet"
+          initial={{ y: "100%" }}
+          animate={{ y: "0%" }}
+          transition={{ duration: 1.0, delay: 0.35, ease: EASE }}
           className="block w-full h-auto fill-black overflow-visible"
           aria-label="AdaptArxiv"
         >
@@ -89,7 +150,7 @@ export function LandingHero() {
             x="50%"
             y="80%"
             textAnchor="middle"
-            textLength="1400"
+            textLength="1080"
             lengthAdjust="spacingAndGlyphs"
             fontFamily="var(--font-serif), 'Times New Roman', serif"
             fontSize="220"
@@ -97,14 +158,14 @@ export function LandingHero() {
           >
             AdaptArxiv
           </text>
-        </svg>
-      </motion.div>
+        </motion.svg>
+      </div>
 
-      {/* Aged-books composite — anchored to TOP of source image (tower tips with inkwell/lens visible) */}
+      {/* Aged-books composite — fades up after wordmark begins (0.45–1.45s) */}
       <motion.div
-        initial={{ opacity: 0, y: 28 }}
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.4, delay: 0.5, ease: EASE }}
+        transition={{ duration: 1.0, delay: 0.45, ease: EASE }}
         className="absolute inset-x-0 bottom-0 z-20 h-[42%] pointer-events-none"
       >
         <Image
