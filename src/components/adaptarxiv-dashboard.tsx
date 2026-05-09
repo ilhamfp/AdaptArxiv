@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { motion } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
   BadgeCheck,
-  Beaker,
-  Database,
   FileText,
   KeyRound,
   Loader2,
@@ -60,6 +59,7 @@ import {
   type RunResult,
 } from "@/lib/contracts";
 import { ACTIVE_RECIPES, BLUEPRINT_INSTRUCTION } from "@/lib/paper";
+import { EASE } from "@/lib/motion";
 
 type Health = {
   ok: boolean;
@@ -236,29 +236,22 @@ export function AdaptArxivDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
-      <section className="border-b border-dark-grey bg-[radial-gradient(circle_at_top_left,rgba(232,217,168,0.08),transparent_38%),linear-gradient(180deg,rgba(196,195,182,0.04),transparent)]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-8 md:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <main className="flex-1 bg-dust">
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: EASE }}
+        className="border-b border-dark-grey/20 bg-base-foreground"
+      >
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-12 md:px-8 md:py-14">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="gap-1">
-                  <Beaker className="size-3.5" />
-                  Demo MVP
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="border-primary/40 text-primary"
-                >
-                  fixed test set
-                </Badge>
-              </div>
-              <h1 className="text-4xl font-semibold tracking-normal text-balance md:text-6xl">
-                AdaptArxiv
+              <h1 className="c-heading-lg-s c-italic-no-uppercase text-foreground">
+                Replicate, <em className="c-italic-emphasis">adapt</em>, compare.
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
-                Recreate a controlled Indonesian sentiment baseline, adapt only
-                the training rows, and compare F1 on the same frozen test set.
+              <p className="mt-5 max-w-2xl c-body text-light-grey">
+                Run the same model on adapted training data and compare results
+                on a held-out evaluation set.
               </p>
             </div>
 
@@ -283,7 +276,7 @@ export function AdaptArxivDashboard() {
                 <Input
                   type="password"
                   autoComplete="current-password"
-                  placeholder="Demo admin password"
+                  placeholder="Password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="h-10"
@@ -312,20 +305,24 @@ export function AdaptArxivDashboard() {
             </Alert>
           ) : null}
         </div>
-      </section>
+      </motion.section>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
+        className="mx-auto grid max-w-7xl gap-5 px-5 py-8 md:px-8 lg:grid-cols-[minmax(0,1fr)_360px]"
+      >
         <div className="grid gap-5">
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="size-5 text-primary" />
-                  Same-runner F1
+                <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
+                  <Activity className="size-4 text-light-grey" />
+                  F1 comparison
                 </CardTitle>
-                <CardDescription>
-                  The Indonesian test set is never adapted. Only training data
-                  changes.
+                <CardDescription className="c-body-sm text-light-grey">
+                  Same model, same evaluation set. Only training data changes.
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -339,7 +336,7 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Play className="size-4" />
                   )}
-                  Paper 500 proof
+                  Run baseline
                 </Button>
                 <Button
                   variant="secondary"
@@ -352,7 +349,7 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Sparkles className="size-4" />
                   )}
-                  Adapt ID
+                  Run adapted
                 </Button>
               </div>
             </CardHeader>
@@ -366,12 +363,13 @@ export function AdaptArxivDashboard() {
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
-                        stroke="rgba(255,255,255,0.08)"
+                        stroke="var(--ds-light-grey)"
+                        strokeOpacity={0.3}
                       />
                       <XAxis
                         dataKey="label"
                         tick={{
-                          fill: "rgba(226,232,240,0.72)",
+                          fill: "var(--ds-light-grey)",
                           fontSize: 12,
                         }}
                         interval={0}
@@ -379,12 +377,15 @@ export function AdaptArxivDashboard() {
                       <YAxis
                         domain={[0, 1]}
                         tick={{
-                          fill: "rgba(226,232,240,0.72)",
+                          fill: "var(--ds-light-grey)",
                           fontSize: 12,
                         }}
                       />
                       <ChartTooltip
-                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                        cursor={{
+                          fill: "var(--ds-dark-grey)",
+                          fillOpacity: 0.06,
+                        }}
                         formatter={(value) => [
                           formatMetric(Number(value)),
                           "F1",
@@ -392,35 +393,35 @@ export function AdaptArxivDashboard() {
                       />
                       <ReferenceLine
                         y={paper?.reportedReferenceF1 ?? 0.79}
-                        stroke="rgba(250,204,21,0.9)"
+                        stroke="var(--ds-aged-binding)"
                         strokeDasharray="6 4"
                         label={{
-                          value: "paper-reported, different runner",
-                          fill: "rgba(250,204,21,0.9)",
+                          value: "Reference",
+                          fill: "var(--ds-aged-binding)",
                           fontSize: 12,
                           position: "insideTopRight",
                         }}
                       />
                       <Bar
                         dataKey="metricValue"
-                        fill="var(--chart-1)"
+                        fill="var(--ds-dark-grey)"
                         radius={[6, 6, 0, 0]}
                       />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-full items-center justify-center rounded-lg border border-white/10 bg-background/50 text-sm text-muted-foreground">
-                    Waiting for a same-runner result
+                  <div className="flex h-full items-center justify-center rounded-lg border border-dark-grey/15 bg-background c-body-sm text-light-grey">
+                    Awaiting first result
                   </div>
                 )}
               </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <Badge variant="outline">
-                  hash: {comparable.testSetHash ?? "waiting for run"}
+              <div className="mt-4 flex flex-wrap items-center gap-2 c-body-sm text-light-grey">
+                <Badge variant="outline" className="font-mono">
+                  evaluation set: {comparable.testSetHash ? comparable.testSetHash.slice(0, 12) : "—"}
                 </Badge>
                 {comparable.rejected.length > 0 ? (
                   <Badge variant="destructive">
-                    {comparable.rejected.length} mismatched run hidden
+                    {comparable.rejected.length} excluded run
                   </Badge>
                 ) : null}
               </div>
@@ -428,11 +429,31 @@ export function AdaptArxivDashboard() {
           </Card>
 
           <Tabs defaultValue="runs" className="w-full">
-            <TabsList>
-              <TabsTrigger value="runs">Run history</TabsTrigger>
-              <TabsTrigger value="validation">Validation</TabsTrigger>
-              <TabsTrigger value="data">Data inspect</TabsTrigger>
-              <TabsTrigger value="spec">Specification</TabsTrigger>
+            <TabsList className="border-b border-dark-grey/20">
+              <TabsTrigger
+                value="runs"
+                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
+              >
+                Run history
+              </TabsTrigger>
+              <TabsTrigger
+                value="validation"
+                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
+              >
+                Validation
+              </TabsTrigger>
+              <TabsTrigger
+                value="data"
+                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
+              >
+                Data inspect
+              </TabsTrigger>
+              <TabsTrigger
+                value="spec"
+                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
+              >
+                Adapter brief
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="runs">
               <RunHistory runs={runs} loading={isPending} />
@@ -458,32 +479,8 @@ export function AdaptArxivDashboard() {
         <aside className="grid content-start gap-5">
           <ManifestPanel paper={paper} />
           <MetricPanel baseline={latestBaseline} adapted={latestAdapted} />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Database className="size-5 text-primary" />
-                Persistence
-              </CardTitle>
-              <CardDescription>
-                Convex stores manifests, run history, adapted dataset metadata,
-                and cached fallbacks.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>
-                Live runs are persisted as immutable rows. When Modal or
-                Adaption times out, the API returns the latest matching
-                completed run.
-              </p>
-              <Separator />
-              <p>
-                Vercel routes use the service-role key server-side only; client
-                code never reads Convex deployment secrets.
-              </p>
-            </CardContent>
-          </Card>
         </aside>
-      </section>
+      </motion.section>
     </main>
   );
 }
@@ -496,30 +493,25 @@ function StatusStrip({
   authenticated: boolean;
 }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-white/10 bg-card/70 p-3 text-sm shadow-sm">
+    <div className="grid gap-2 rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-muted-foreground">
-          <ShieldCheck className="size-4 text-primary" />
-          Environment
+        <span className="flex items-center gap-2 text-light-grey">
+          <ShieldCheck className="size-4 text-light-grey" />
+          Status
         </span>
         <Badge variant={health?.ok ? "default" : "secondary"}>
-          {health?.ok ? "ready" : "needs keys"}
+          {health?.ok ? "Connected" : "Configuring"}
         </Badge>
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-muted-foreground">
-          <Lock className="size-4 text-primary" />
-          Run access
+        <span className="flex items-center gap-2 text-light-grey">
+          <Lock className="size-4 text-light-grey" />
+          Access
         </span>
         <Badge variant={authenticated ? "default" : "outline"}>
-          {authenticated ? "unlocked" : "locked"}
+          {authenticated ? "Signed in" : "Signed out"}
         </Badge>
       </div>
-      {health?.missing?.length ? (
-        <p className="text-xs text-muted-foreground">
-          Missing: {health.missing.join(", ")}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -528,25 +520,24 @@ function ManifestPanel({ paper }: { paper: PaperManifest | null }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="size-5 text-primary" />
-          Paper manifest
+        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
+          <FileText className="size-4 text-light-grey" />
+          Source paper
         </CardTitle>
-        <CardDescription>
-          Extracted values are hardcoded for the demo paper.
-        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+      <CardContent className="space-y-4 c-body-sm">
         <div>
-          <p className="font-medium">{paper?.title ?? "Loading manifest"}</p>
-          <p className="mt-1 text-muted-foreground">
+          <p className="c-body font-medium text-foreground">
+            {paper?.title ?? "Loading"}
+          </p>
+          <p className="mt-1 text-light-grey">
             {paper?.authors.join(", ") ??
               "Ilham Firdausi Putra, Ayu Purwarianti"}
           </p>
         </div>
-        <div className="grid gap-2 text-muted-foreground">
-          <Badge variant="outline" className="w-fit">
-            reported in paper
+        <div className="grid gap-2 text-light-grey">
+          <Badge variant="outline" className="c-link uppercase tracking-[0.18em] w-fit">
+            Reported result
           </Badge>
           <p>
             Task:{" "}
@@ -573,22 +564,24 @@ function MetricPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BadgeCheck className="size-5 text-primary" />
+        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
+          <BadgeCheck className="size-4 text-light-grey" />
           Current delta
         </CardTitle>
-        <CardDescription>Same runner, same split, same fixed test set.</CardDescription>
+        <CardDescription className="c-body-sm text-light-grey">
+          Adapted vs. baseline on the evaluation set.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Baseline" value={baseline?.metricValue} />
           <Metric label="Adapted" value={adapted?.metricValue} />
         </div>
-        <div className="rounded-lg border border-white/10 bg-background/60 p-3">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
+          <p className="c-small uppercase tracking-[0.18em] text-light-grey">
             F1 delta
           </p>
-          <p className="mt-1 text-3xl font-semibold">
+          <p className="mt-1 c-heading-sm font-heading text-foreground tabular-nums">
             {delta === null ? "—" : `${delta >= 0 ? "+" : ""}${formatMetric(delta)}`}
           </p>
         </div>
@@ -607,11 +600,11 @@ function Metric({
   format?: "metric" | "integer";
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-background/60 p-3">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
+      <p className="c-small uppercase tracking-[0.18em] text-light-grey">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-semibold">
+      <p className="mt-1 c-heading-xs font-heading text-foreground tabular-nums">
         {value === undefined
           ? "—"
           : format === "integer"
@@ -629,11 +622,21 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Source</TableHead>
-              <TableHead>F1</TableHead>
-              <TableHead>Provenance</TableHead>
-              <TableHead>Hash</TableHead>
-              <TableHead className="text-right">Duration</TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
+                Source
+              </TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
+                F1
+              </TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
+                Provenance
+              </TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
+                Hash
+              </TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey text-right">
+                Duration
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -641,7 +644,7 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="h-24 text-center text-muted-foreground"
+                  className="h-24 text-center c-body-sm text-light-grey"
                 >
                   {loading ? "Loading runs" : "No completed runs yet"}
                 </TableCell>
@@ -649,19 +652,21 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
             ) : (
               runs.map((run, index) => (
                 <TableRow key={`${run.trainingSource}-${run.testSetHash}-${index}`}>
-                  <TableCell className="font-medium">
+                  <TableCell className="c-body-sm font-medium text-foreground">
                     {runLabel(run.trainingSource)}
                   </TableCell>
-                  <TableCell>{formatMetric(run.metricValue)}</TableCell>
+                  <TableCell className="c-body-sm tabular-nums text-foreground">
+                    {formatMetric(run.metricValue)}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                       {run.provenance.replaceAll("_", " ")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
+                  <TableCell className="font-mono text-xs text-light-grey">
                     {run.testSetHash.slice(0, 12)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right c-body-sm tabular-nums text-foreground">
                     {(run.durationMs / 1000).toFixed(1)}s
                   </TableCell>
                 </TableRow>
@@ -676,11 +681,11 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
 
 function runLabel(source: RunResult["trainingSource"]): string {
   const labels: Record<RunResult["trainingSource"], string> = {
-    indonesian_only: "Legacy Indonesian only",
-    adaption_id_aug: "Legacy Adaption-adapted Indonesian",
-    paper_raw_full: "Paper raw full",
-    paper_raw_paired: "Paired raw",
-    adaption_adapted_only: "Adaption adapted-only",
+    indonesian_only: "Baseline (original)",
+    adaption_id_aug: "Adapted (augmented)",
+    paper_raw_full: "Baseline (full)",
+    paper_raw_paired: "Baseline (paired)",
+    adaption_adapted_only: "Adapted (cleaned)",
   };
   return labels[source];
 }
@@ -693,10 +698,11 @@ function ValidationPanel({ run }: { run?: RunResult }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Data validation</CardTitle>
-        <CardDescription>
-          Rows are checked for schema, label, Indonesian language, duplicates,
-          and test leakage.
+        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground">
+          Data validation
+        </CardTitle>
+        <CardDescription className="c-body-sm text-light-grey">
+          Rows are checked for schema, language, duplicates, and leakage.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5 lg:grid-cols-3">
@@ -718,19 +724,19 @@ function ValidationPanel({ run }: { run?: RunResult }) {
           />
         </div>
         <div className="grid gap-3">
-          <div className="rounded-lg border border-white/10 bg-background/60 p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Adaption evaluator
+          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
+            <p className="c-small uppercase tracking-[0.18em] text-light-grey">
+              Improvement
             </p>
-            <p className="mt-1 text-2xl font-semibold">
+            <p className="mt-1 c-heading-xs font-heading text-foreground tabular-nums">
               {adaption?.improvementPercent === undefined
                 ? "—"
                 : `${adaption.improvementPercent.toFixed(1)}%`}
             </p>
           </div>
-          <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
-            <p className="font-medium">Drops</p>
-            <p className="mt-2 text-muted-foreground">
+          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
+            <p className="c-small uppercase tracking-[0.18em] text-light-grey">Drops</p>
+            <p className="mt-2 text-light-grey">
               {validation?.drops
                 ? Object.entries(validation.drops)
                     .map(([key, value]) => `${key}: ${value}`)
@@ -740,41 +746,43 @@ function ValidationPanel({ run }: { run?: RunResult }) {
           </div>
         </div>
         <div className="grid gap-3">
-          <div className="rounded-lg border border-white/10 bg-background/60 p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Adaption accounting
+          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
+            <p className="c-small uppercase tracking-[0.18em] text-light-grey">
+              Row accounting
             </p>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 c-body-sm text-light-grey">
               Uploaded{" "}
-              <span className="text-foreground">{audit?.uploadedRows ?? "—"}</span>
+              <span className="text-foreground tabular-nums">{audit?.uploadedRows ?? "—"}</span>
               , ingested{" "}
-              <span className="text-foreground">{audit?.ingestedRows ?? "—"}</span>
+              <span className="text-foreground tabular-nums">{audit?.ingestedRows ?? "—"}</span>
               , processed{" "}
-              <span className="text-foreground">{audit?.processedRows ?? "—"}</span>
+              <span className="text-foreground tabular-nums">{audit?.processedRows ?? "—"}</span>
               , downloaded{" "}
-              <span className="text-foreground">{audit?.downloadedRows ?? "—"}</span>
+              <span className="text-foreground tabular-nums">{audit?.downloadedRows ?? "—"}</span>
               .
             </p>
           </div>
-          <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
-            <p className="font-medium">Parser audit</p>
+          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
+            <p className="c-small uppercase tracking-[0.18em] text-light-grey">
+              Parser audit
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge variant="outline">
+              <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                 fallback: {audit?.parserFallbackCount ?? "—"}
               </Badge>
-              <Badge variant="outline">
+              <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                 label mismatch: {audit?.labelMismatchCount ?? "—"}
               </Badge>
-              <Badge variant="outline">
+              <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                 raw matches: {audit?.exactRawMatchCount ?? "—"}
               </Badge>
             </div>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-2 text-light-grey">
               {audit
                 ? `Shapes: ${formatCounts(audit.outputShapeCounts) || "none"}`
                 : "Waiting for audit"}
             </p>
-            <p className="mt-1 text-muted-foreground">
+            <p className="mt-1 text-light-grey">
               {audit
                 ? `Parse: ${formatCounts(audit.parseStatusCounts) || "none"}`
                 : ""}
@@ -805,13 +813,12 @@ function DataInspectionPanel({
     <Card>
       <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <CardTitle className="flex items-center gap-2">
-            <Rows3 className="size-5 text-primary" />
+          <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
+            <Rows3 className="size-4 text-light-grey" />
             Data inspect
           </CardTitle>
-          <CardDescription>
-            Compare the sampled raw training rows with rows that survived the
-            Adaption validation gate.
+          <CardDescription className="c-body-sm text-light-grey">
+            Compare original training rows with rows that passed validation.
           </CardDescription>
         </div>
         <Button
@@ -832,10 +839,9 @@ function DataInspectionPanel({
         {!authenticated ? (
           <Alert>
             <Lock className="size-4" />
-            <AlertTitle>Unlock required</AlertTitle>
+            <AlertTitle>Sign in required</AlertTitle>
             <AlertDescription>
-              Dataset previews use the Modal runner and are gated behind the
-              demo admin password.
+              Sign in to load training samples.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -859,29 +865,29 @@ function DataInspectionPanel({
                 format="integer"
               />
               <Metric
-                label="Adaption returned"
+                label="Adapter returned"
                 value={preview.adapted?.rowsReturned}
                 format="integer"
               />
             </div>
 
-            <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
-              <div className="grid gap-2 md:grid-cols-2">
-                <p className="text-muted-foreground">
+            <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
+              <div className="grid gap-2 md:grid-cols-2 text-light-grey">
+                <p>
                   Baseline trains on{" "}
                   <span className="text-foreground">
                     {setup?.baselineTrainText}
                   </span>
                   .
                 </p>
-                <p className="text-muted-foreground">
-                  Adaption trains on{" "}
+                <p>
+                  Adapted trains on{" "}
                   <span className="text-foreground">
                     {setup?.adaptedTrainText}
                   </span>
                   .
                 </p>
-                <p className="text-muted-foreground">
+                <p>
                   Head:{" "}
                   <span className="text-foreground">
                     {setup?.classifier}, budget {setup?.classifierMaxIter},
@@ -889,7 +895,7 @@ function DataInspectionPanel({
                   </span>
                   .
                 </p>
-                <p className="text-muted-foreground">
+                <p>
                   Early stopping:{" "}
                   <span className="text-foreground">
                     {setup?.earlyStopping
@@ -906,7 +912,7 @@ function DataInspectionPanel({
                   </span>
                   .
                 </p>
-                <p className="text-muted-foreground">
+                <p>
                   Loss and optimizer:{" "}
                   <span className="text-foreground">
                     {[setup?.loss, setup?.optimizer, setup?.scheduler]
@@ -915,38 +921,40 @@ function DataInspectionPanel({
                   </span>
                   .
                 </p>
-                <p className="text-muted-foreground">
+                <p>
                   Decision threshold:{" "}
-                  <span className="text-foreground">
+                  <span className="text-foreground tabular-nums">
                     {setup?.threshold ?? 0.5}
                   </span>
                   .
                 </p>
               </div>
-              <Separator className="my-3" />
+              <Separator className="my-3 bg-dark-grey/20" />
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">hash: {preview.testSet.hash.slice(0, 16)}</Badge>
-                <Badge variant="outline">
+                <Badge variant="outline" className="c-link uppercase tracking-[0.16em] font-mono">
+                  hash: {preview.testSet.hash.slice(0, 16)}
+                </Badge>
+                <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                   raw labels: {formatCounts(preview.raw.labelCounts)}
                 </Badge>
                 {preview.adapted ? (
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                     drops: {formatCounts(preview.adapted.drops) || "none"}
                   </Badge>
                 ) : (
-                  <Badge variant="secondary">
-                    no Adaption dataset selected
+                  <Badge variant="secondary" className="c-link uppercase tracking-[0.16em]">
+                    No adapted dataset selected
                   </Badge>
                 )}
                 {preview.adapted?.audit ? (
                   <>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                       fallback: {preview.adapted.audit.parserFallbackCount}
                     </Badge>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                       label mismatch: {preview.adapted.audit.labelMismatchCount}
                     </Badge>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                       shapes: {formatCounts(preview.adapted.audit.outputShapeCounts)}
                     </Badge>
                   </>
@@ -955,9 +963,19 @@ function DataInspectionPanel({
             </div>
 
             <Tabs defaultValue="raw" className="w-full">
-              <TabsList>
-                <TabsTrigger value="raw">Raw train</TabsTrigger>
-                <TabsTrigger value="adapted">Adaption output</TabsTrigger>
+              <TabsList className="border-b border-dark-grey/20">
+                <TabsTrigger
+                  value="raw"
+                  className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
+                >
+                  Raw train
+                </TabsTrigger>
+                <TabsTrigger
+                  value="adapted"
+                  className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
+                >
+                  Adapted output
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="raw">
                 <PreviewTable mode="raw" rows={preview.raw.rows} />
@@ -966,19 +984,18 @@ function DataInspectionPanel({
                 {preview.adapted ? (
                   <PreviewTable mode="adapted" rows={preview.adapted.rows} />
                 ) : (
-                  <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
-                    Run or load an Adaption result before inspecting adapted
-                    rows.
+                  <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-8 text-center c-body-sm text-light-grey">
+                    Run an adapted experiment to inspect rows.
                   </div>
                 )}
               </TabsContent>
             </Tabs>
           </>
         ) : (
-          <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-8 text-center c-body-sm text-light-grey">
             {adaptedRun?.adaption?.datasetId
-              ? "Load samples to compare raw and Adaption-passed rows."
-              : "Run Paper 500 proof first, then load samples for the paired inspection."}
+              ? "Load samples to compare original and adapted rows."
+              : "Run the baseline first, then load samples for comparison."}
           </div>
         )}
       </CardContent>
@@ -994,26 +1011,26 @@ function PreviewTable({
   rows: DatasetPreview["raw"]["rows"];
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-white/10">
+    <div className="overflow-x-auto rounded-lg border border-dark-grey/15">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-16">#</TableHead>
-              <TableHead className="min-w-40">Source ID</TableHead>
-              <TableHead className="w-28">Label</TableHead>
-              <TableHead className="min-w-80">Raw original</TableHead>
-              <TableHead className="min-w-80">Paper-preprocessed raw</TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey w-16">#</TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-40">Source ID</TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey w-28">Label</TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">Raw original</TableHead>
+              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">Paper-preprocessed raw</TableHead>
               {mode === "adapted" ? (
                 <>
-                  <TableHead className="min-w-80">Adaption raw output</TableHead>
-                  <TableHead className="min-w-80">
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">Adapted raw output</TableHead>
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">
                     Paper-preprocessed adapted
                   </TableHead>
-                  <TableHead className="min-w-32">Output</TableHead>
-                  <TableHead className="min-w-36">Parse</TableHead>
-                  <TableHead className="min-w-32">Generated label</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
-                  <TableHead className="min-w-40">Drop reason</TableHead>
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-32">Output</TableHead>
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-36">Parse</TableHead>
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-32">Generated label</TableHead>
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey w-28">Status</TableHead>
+                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-40">Drop reason</TableHead>
                 </>
               ) : null}
             </TableRow>
@@ -1023,7 +1040,7 @@ function PreviewTable({
               <TableRow>
                 <TableCell
                   colSpan={mode === "adapted" ? 12 : 5}
-                  className="h-24 text-center text-muted-foreground"
+                  className="h-24 text-center c-body-sm text-light-grey"
                 >
                   No preview rows available
                 </TableCell>
@@ -1031,51 +1048,52 @@ function PreviewTable({
             ) : (
               rows.map((row) => (
                 <TableRow key={`${mode}-${row.rowIndex}`}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
+                  <TableCell className="font-mono text-xs text-light-grey tabular-nums">
                     {row.rowIndex}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
+                  <TableCell className="font-mono text-xs text-light-grey">
                     {row.sourceId || "-"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{row.label}</Badge>
+                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">{row.label}</Badge>
                   </TableCell>
-                  <TableCell className="max-w-md whitespace-normal text-sm leading-6 text-muted-foreground">
+                  <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-light-grey">
                     {row.originalText || row.text || "-"}
                   </TableCell>
-                  <TableCell className="max-w-md whitespace-normal text-sm leading-6">
+                  <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-foreground">
                     {row.preprocessedOriginalText || row.text || "-"}
                   </TableCell>
                   {mode === "adapted" ? (
                     <>
-                      <TableCell className="max-w-md whitespace-normal text-sm leading-6 text-muted-foreground">
+                      <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-light-grey">
                         {row.adaptedTextRaw || row.adaptedText || "-"}
                       </TableCell>
-                      <TableCell className="max-w-md whitespace-normal text-sm leading-6">
+                      <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-foreground">
                         {row.preprocessedAdaptedText ||
                           row.adaptedText ||
                           row.adaptedTextRaw ||
                           "-"}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="c-body-sm text-light-grey">
                         {row.outputShape || "-"}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="c-body-sm text-light-grey">
                         {row.parseStatus || "-"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
+                        <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
                           {row.generatedLabel || "-"}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant={row.status === "passed" ? "default" : "outline"}
+                          className="c-link uppercase tracking-[0.16em]"
                         >
                           {row.status || "unknown"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="c-body-sm text-light-grey">
                         {row.dropReason || "-"}
                       </TableCell>
                     </>
@@ -1099,16 +1117,26 @@ function SpecificationPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Blueprint specification</CardTitle>
-        <CardDescription>
-          Sent to Adaption for Indonesian-only prompt rephrase and deduplication.
+        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground">
+          Adapter brief
+        </CardTitle>
+        <CardDescription className="c-body-sm text-light-grey">
+          Instructions used by the adapter to refine training rows.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <Textarea value={BLUEPRINT_INSTRUCTION} readOnly className="min-h-28" />
+        <Textarea
+          value={BLUEPRINT_INSTRUCTION}
+          readOnly
+          className="min-h-28 c-body-sm font-mono text-foreground"
+        />
         <div className="flex flex-wrap gap-2">
           {Object.entries(ACTIVE_RECIPES).map(([recipe, enabled]) => (
-            <Badge key={recipe} variant={enabled ? "default" : "outline"}>
+            <Badge
+              key={recipe}
+              variant={enabled ? "default" : "outline"}
+              className="c-link uppercase tracking-[0.16em]"
+            >
               {recipe.replaceAll("_", " ")}: {enabled ? "on" : "off"}
             </Badge>
           ))}

@@ -9,11 +9,7 @@ import { DiamondButton } from "@/components/ui/diamond-button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
-
-// ease-out-quad — Structured Money's signature easing for hero cadence
-const EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
-// ease-out-expo — DESIGN.md §7.1, the section-reveal cadence (slower, more cinematic)
-const EASE_EXPO: [number, number, number, number] = [0.19, 1, 0.22, 1];
+import { EASE, EASE_OUT_EXPO } from "@/lib/motion";
 
 /**
  * Per-letter clip-reveal helper. Each letter sits in an inline-block span and
@@ -117,7 +113,7 @@ export function LandingHero() {
         <motion.form
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.85, ease: EASE_EXPO }}
+          transition={{ duration: 0.9, delay: 0.85, ease: EASE_OUT_EXPO }}
           onSubmit={handleSubmit}
           className="mt-10 flex w-full max-w-2xl flex-col items-stretch gap-6 sm:mt-14 sm:flex-row sm:items-end sm:gap-10"
         >
