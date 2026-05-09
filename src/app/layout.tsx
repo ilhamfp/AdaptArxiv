@@ -13,8 +13,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "AdaptArxiv",
-  description:
-    "Real research, structured. Reproduce the experiments behind any paper.",
+  description: "Real research, structured.",
+  manifest: "/manifest.webmanifest",
 };
 
 export const viewport = {
