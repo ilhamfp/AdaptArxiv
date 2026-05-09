@@ -14,6 +14,7 @@ type Variant = "primary" | "light" | "bordered";
 type DiamondButtonProps = {
   href?: string;
   onClick?: () => void;
+  type?: "button" | "submit";
   children: React.ReactNode;
   className?: string;
   variant?: Variant;
@@ -33,6 +34,7 @@ const VARIANT_CLASSES: Record<Variant, string> = {
 export function DiamondButton({
   href,
   onClick,
+  type = "button",
   children,
   className,
   variant = "primary",
@@ -43,7 +45,7 @@ export function DiamondButton({
     "relative inline-flex h-[var(--button-height)] min-w-[var(--button-min-width)]",
     "items-center justify-center px-7",
     "text-[length:var(--button-font-size)] font-sans tracking-wide uppercase",
-    "transition-[clip-path,background-color,color] duration-300 ease-[var(--ease-out-quad)]",
+    "transition-[clip-path,background-color,color] duration-300 ease-[var(--ease-out-quad)] motion-reduce:transition-none",
     "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-black",
     "select-none cursor-pointer overflow-hidden",
     VARIANT_CLASSES[variant],
@@ -69,7 +71,7 @@ export function DiamondButton({
         className={cn(
           "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full",
           "bg-current opacity-0 scale-75",
-          "transition-[transform,opacity] duration-300 ease-[var(--ease-out-quad)]",
+          "transition-[transform,opacity] duration-300 ease-[var(--ease-out-quad)] motion-reduce:transition-none",
           active && "scale-[1.6] opacity-25",
         )}
       />
@@ -79,7 +81,7 @@ export function DiamondButton({
         className={cn(
           "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full",
           "bg-current opacity-0 scale-75",
-          "transition-[transform,opacity] duration-300 ease-[var(--ease-out-quad)]",
+          "transition-[transform,opacity] duration-300 ease-[var(--ease-out-quad)] motion-reduce:transition-none",
           active && "scale-[1.6] opacity-25",
         )}
       />
@@ -94,7 +96,7 @@ export function DiamondButton({
     );
   }
   return (
-    <button type="button" className={classes} style={style} {...handlers}>
+    <button type={type} className={classes} style={style} {...handlers}>
       {inner}
     </button>
   );

@@ -2,13 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { motion, MotionConfig } from "framer-motion";
 import { DiamondButton } from "@/components/ui/diamond-button";
+import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 
 // ease-out-quad — Structured Money's signature easing for hero cadence
 const EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+// ease-out-expo — DESIGN.md §7.1, the section-reveal cadence (slower, more cinematic)
+const EASE_EXPO: [number, number, number, number] = [0.19, 1, 0.22, 1];
 
 /**
  * Per-letter clip-reveal helper. Each letter sits in an inline-block span and
@@ -54,10 +59,17 @@ function SplitLine({
   );
 }
 
-const METRICS = ["F1: 0.79", "·", "Indonesian sentiment"];
-
 export function LandingHero() {
+  const router = useRouter();
+  const [arxivUrl, setArxivUrl] = useState("");
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    router.push("/dashboard");
+  };
+
   return (
+    <MotionConfig reducedMotion="user">
     <main
       id="main"
       className="relative h-dvh w-full overflow-hidden bg-dust text-black"
@@ -88,50 +100,44 @@ export function LandingHero() {
         </motion.div>
       </header>
 
-      {/* Centered hero — z-30 */}
-      <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-4 -translate-y-[8vh]">
+      {/* Centered hero — z-30. Lifted further so the form has air above the wordmark. */}
+      <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-4 -translate-y-[14vh]">
         {/* Title: line 1 letters at t=0.20s, italic line 2 letters at t=0.95s (ceremonial pause) */}
-        <h1 className="c-heading-lg c-italic-no-uppercase text-black max-w-[20ch] leading-[1.1]">
+        <h1 className="c-heading-lg c-italic-no-uppercase text-black max-w-[20ch] leading-[1.1] text-balance">
           <SplitLine text="Real research," baseDelay={0.2} />
           <SplitLine
-            text="structured"
+            text="adapting"
             baseDelay={0.95}
             italic
             className="c-italic-emphasis"
           />
         </h1>
 
-        {/* Metrics row: per-word fade-up (0.20–0.90s) */}
-        <div className="mt-7 flex items-center gap-x-5 c-body-sm tracking-[0.18em] uppercase text-black/75 tabular-nums">
-          {METRICS.map((word, i) => (
-            <motion.span
-              key={i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.6,
-                delay: 0.2 + i * 0.1,
-                ease: EASE,
-              }}
-              className={cn(i === 1 && "text-black/35")}
-              aria-hidden={i === 1 || undefined}
-            >
-              {word}
-            </motion.span>
-          ))}
-        </div>
-
-        {/* CTA — lands as title finishes its visual heavy beat (0.85–1.45s) */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
+        {/* arXiv form — fades up with section-reveal cadence (out-expo, 0.9s) */}
+        <motion.form
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.85, ease: EASE }}
-          className="mt-9"
+          transition={{ duration: 0.9, delay: 0.85, ease: EASE_EXPO }}
+          onSubmit={handleSubmit}
+          className="mt-10 flex w-full max-w-2xl flex-col items-stretch gap-6 sm:mt-14 sm:flex-row sm:items-end sm:gap-10"
         >
-          <DiamondButton href="/dashboard" variant="primary">
-            open dashboard
+          <Input
+            type="url"
+            name="arxivUrl"
+            autoComplete="url"
+            inputMode="url"
+            spellCheck={false}
+            required
+            value={arxivUrl}
+            onChange={(event) => setArxivUrl(event.target.value)}
+            placeholder="https://arxiv.org/abs/2009.05713"
+            aria-label="arXiv paper URL"
+            className="h-12 w-full rounded-none border-0 border-b border-dark-grey bg-transparent px-4 pb-3 text-[15px] font-sans text-black placeholder:text-black/45 shadow-none transition-colors duration-[var(--transition-duration)] ease-[var(--ease-out-quad)] focus-visible:border-black focus-visible:ring-0 sm:flex-1"
+          />
+          <DiamondButton type="submit" variant="primary">
+            adapt
           </DiamondButton>
-        </motion.div>
+        </motion.form>
       </div>
 
       {/* Wordmark — slides up from below over 1.0s, delayed 0.35s. Matches Structured's bottom-logo cadence.
@@ -149,7 +155,7 @@ export function LandingHero() {
           animate={{ y: "0%" }}
           transition={{ duration: 1.0, delay: 0.35, ease: EASE }}
           className="block w-full h-auto fill-black overflow-visible"
-          aria-label="AdaptArxiv"
+          aria-hidden="true"
         >
           <text
             x="50%"
@@ -193,5 +199,6 @@ export function LandingHero() {
         </motion.div>
       </div>
     </main>
+    </MotionConfig>
   );
 }
