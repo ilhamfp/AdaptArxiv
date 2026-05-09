@@ -71,29 +71,41 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      {/* Massive wordmark — z-10. Overflows horizontally; bottom of letters cut under viewport edge. */}
-      <div className="absolute inset-x-0 bottom-0 z-10 translate-y-[6%] pointer-events-none flex justify-center">
-        <motion.span
-          translate="no"
-          initial={{ opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.2, delay: 0.4, ease: EASE }}
-          className="block font-serif text-black leading-none whitespace-nowrap"
-          style={{
-            fontSize: "clamp(280px, 38vw, 720px)",
-            letterSpacing: "-0.05em",
-          }}
+      {/* Wordmark — SVG that fits viewport width, slight bottom-edge crop */}
+      <motion.div
+        translate="no"
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.2, delay: 0.4, ease: EASE }}
+        className="absolute inset-x-0 bottom-0 z-10 translate-y-[12%] pointer-events-none"
+      >
+        <svg
+          viewBox="0 0 1440 240"
+          preserveAspectRatio="xMidYEnd meet"
+          className="block w-full h-auto fill-black overflow-visible"
+          aria-label="AdaptArxiv"
         >
-          AdaptArxiv
-        </motion.span>
-      </div>
+          <text
+            x="50%"
+            y="80%"
+            textAnchor="middle"
+            textLength="1400"
+            lengthAdjust="spacingAndGlyphs"
+            fontFamily="var(--font-serif), 'Times New Roman', serif"
+            fontSize="220"
+            fontWeight="400"
+          >
+            AdaptArxiv
+          </text>
+        </svg>
+      </motion.div>
 
-      {/* Aged-books composite — single full-width strip at the bottom; only book bases show */}
+      {/* Aged-books composite — anchored to TOP of source image (tower tips with inkwell/lens visible) */}
       <motion.div
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1.4, delay: 0.5, ease: EASE }}
-        className="absolute inset-x-0 bottom-0 z-20 h-[28%] pointer-events-none"
+        className="absolute inset-x-0 bottom-0 z-20 h-[42%] pointer-events-none"
       >
         <Image
           src="/assets/aged-books.png"
@@ -101,7 +113,7 @@ export function LandingHero() {
           fill
           priority
           sizes="100vw"
-          className="object-cover object-bottom select-none"
+          className="object-cover object-top select-none"
           draggable={false}
         />
       </motion.div>
