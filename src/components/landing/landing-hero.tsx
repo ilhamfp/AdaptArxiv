@@ -161,23 +161,31 @@ export function LandingHero() {
         </motion.svg>
       </div>
 
-      {/* Aged-books composite — fades up after wordmark begins (0.45–1.45s) */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.0, delay: 0.45, ease: EASE }}
-        className="absolute inset-x-0 bottom-0 z-20 h-[42%] pointer-events-none"
-      >
-        <Image
-          src="/assets/aged-books.png"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-top select-none"
-          draggable={false}
-        />
-      </motion.div>
+      {/* Aged-books composite — fades up after wordmark begins (0.45–1.45s).
+          Outer div carries a static translate-y so the books sit slightly past
+          the viewport edge: small shift on desktop ("slightly down"), larger on
+          mobile so the source image's transparent bottom row gets clipped under
+          the viewport instead of leaving the books "hovering" above cream
+          background. Framer's y animation lives on the inner motion.div so the
+          two transforms don't collide. */}
+      <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] translate-y-[16%] sm:translate-y-[5%] pointer-events-none">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.0, delay: 0.45, ease: EASE }}
+          className="absolute inset-0"
+        >
+          <Image
+            src="/assets/aged-books.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-top select-none"
+            draggable={false}
+          />
+        </motion.div>
+      </div>
     </main>
   );
 }
