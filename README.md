@@ -2,7 +2,7 @@
 
 **Replicate, adapt, compare.**
 
-[Demo Video Link](https://www.loom.com/share/06a779660ded4e8284b7afe720427cae)
+[Demo Video Link](https://drive.google.com/file/d/1rHMJIq2OJZcM3KeFGBpO6qtuE7BvdsCq/view)
 
 AdaptArxiv turns research papers into rerunnable adaptation experiments. Drop in
 an arXiv link, let the system recover the experimental setup, adapt the training
