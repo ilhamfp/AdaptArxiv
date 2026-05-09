@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, MotionConfig } from "framer-motion";
 import { DiamondButton } from "@/components/ui/diamond-button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
@@ -69,6 +69,7 @@ export function LandingHero() {
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <main
       id="main"
       className="relative h-dvh w-full overflow-hidden bg-dust text-black"
@@ -102,7 +103,7 @@ export function LandingHero() {
       {/* Centered hero — z-30. Lifted further so the form has air above the wordmark. */}
       <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-4 -translate-y-[14vh]">
         {/* Title: line 1 letters at t=0.20s, italic line 2 letters at t=0.95s (ceremonial pause) */}
-        <h1 className="c-heading-lg c-italic-no-uppercase text-black max-w-[20ch] leading-[1.1]">
+        <h1 className="c-heading-lg c-italic-no-uppercase text-black max-w-[20ch] leading-[1.1] text-balance">
           <SplitLine text="Real research," baseDelay={0.2} />
           <SplitLine
             text="adapting"
@@ -122,6 +123,10 @@ export function LandingHero() {
         >
           <Input
             type="url"
+            name="arxivUrl"
+            autoComplete="url"
+            inputMode="url"
+            spellCheck={false}
             required
             value={arxivUrl}
             onChange={(event) => setArxivUrl(event.target.value)}
@@ -150,7 +155,7 @@ export function LandingHero() {
           animate={{ y: "0%" }}
           transition={{ duration: 1.0, delay: 0.35, ease: EASE }}
           className="block w-full h-auto fill-black overflow-visible"
-          aria-label="AdaptArxiv"
+          aria-hidden="true"
         >
           <text
             x="50%"
@@ -194,5 +199,6 @@ export function LandingHero() {
         </motion.div>
       </div>
     </main>
+    </MotionConfig>
   );
 }
