@@ -4,41 +4,100 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* DESIGN.md §3.1 — self-hosted Davinci, family name "Davinci" (not TRJN-DaVinci) */
+@font-face {
+  font-family: "Davinci";
+  src: url("/fonts/TRJN-DaVinci-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Davinci";
+  src: url("/fonts/TRJN-DaVinci-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Davinci";
+  src: url("/fonts/TRJN-DaVinci-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme inline {
+  /* shadcn semantic aliases (preserved for /dashboard) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
-  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* DESIGN.md palette — Tailwind utilities like text-grey, bg-linen, border-dark-grey */
+  --color-grey: var(--ds-grey);
+  --color-light-grey: var(--ds-light-grey);
+  --color-dark-grey: var(--ds-dark-grey);
+  --color-linen: var(--ds-linen);
+  --color-ghost: var(--ds-ghost);
+  --color-secondary-warm: var(--ds-secondary);
+  --color-base-foreground: var(--ds-base-foreground);
+  --color-dust: var(--ds-dust);
+  --color-cream: var(--ds-cream);
+  --color-aged-binding: var(--ds-aged-binding);
+
+  /* Typography */
+  --font-sans: var(--font-inter), "Helvetica Neue", "Arial", sans-serif;
+  --font-serif: "Davinci", "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-heading: "Davinci", "Times New Roman", serif;
+
+  /* Type scale (DESIGN.md §3.2) */
+  --text-heading-xxl: clamp(9.0625rem, 3.519rem + 27.7174vw, 25rem);
+  --text-heading-xl: clamp(2.8125rem, 1.7473rem + 5.3261vw, 5.875rem);
+  --text-heading-lg: clamp(2.875rem, 2.7446rem + 0.6522vw, 3.25rem);
+  --text-heading-lg-s: clamp(2.25rem, 1.9022rem + 1.7391vw, 3.25rem);
+  --text-heading-md: clamp(1.875rem, 1.788rem + 0.4348vw, 2.125rem);
+  --text-heading-sm: clamp(1.5rem, 1.4348rem + 0.3261vw, 1.6875rem);
+  --text-heading-xs: clamp(1.1875rem, 1.144rem + 0.2174vw, 1.3125rem);
+  --text-body: 0.9375rem;
+  --text-body-sm: clamp(0.75rem, 0.6848rem + 0.3261vw, 0.9375rem);
+  --text-link: 0.75rem;
+  --text-small: 0.5625rem;
+
+  /* Easing tokens (DESIGN.md §7.1) */
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
+
+  /* Radius (DESIGN.md §5.1) */
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,72 +108,109 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* shadcn semantic tokens — light mode fallback (rarely used; <html> ships .dark) */
+  --background: #f5f5f4;
+  --foreground: #0a0a0a;
+  --card: #f5f5f4;
+  --card-foreground: #0a0a0a;
+  --popover: #f5f5f4;
+  --popover-foreground: #0a0a0a;
+  --primary: #000000;
+  --primary-foreground: #dfdcd5;
+  --secondary: #ebebeb;
+  --secondary-foreground: #0a0a0a;
+  --muted: #ebebeb;
+  --muted-foreground: #595855;
+  --accent: #ebebeb;
+  --accent-foreground: #0a0a0a;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.66 0.15 178);
-  --chart-2: oklch(0.74 0.16 85);
-  --chart-3: oklch(0.64 0.17 25);
-  --chart-4: oklch(0.58 0.16 276);
-  --chart-5: oklch(0.62 0.11 205);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: #595855;
+  --input: #595855;
+  --ring: #c4c3b6;
+  --chart-1: #595855;
+  --chart-2: #7e7d75;
+  --chart-3: #c4c3b6;
+  --chart-4: #b49759;
+  --chart-5: #8b6f3d;
+  --radius: 0.625rem; /* 10px per DESIGN.md §5.1 card radius */
+  --sidebar: #f5f5f4;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #dfdcd5;
+  --sidebar-accent: #ebebeb;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #595855;
+  --sidebar-ring: #c4c3b6;
+
+  /* DESIGN.md §2 palette — referenced by @theme inline as --color-* utilities */
+  --ds-grey: #c4c3b6;
+  --ds-light-grey: #7e7d75;
+  --ds-dark-grey: #595855;
+  --ds-linen: #dfdcd5;
+  --ds-ghost: #dfdcd5;
+  --ds-secondary: #e7e5e4;
+  --ds-base-foreground: #f5f5f4;
+  --ds-dust: #ebebeb;
+  --ds-cream: #e8d9a8; /* manuscript-specific extension */
+  --ds-aged-binding: #8b6f3d;
+
+  /* DESIGN.md §6.2 — button vars */
+  --button-height: 40px;
+  --button-min-width: 95px;
+  --button-radius: 4px;
+  --button-font-size: 15px;
+  --button-padding: 0 6px;
+  --button-color: #dfdcd5;
+  --button-background: #000000;
+  --button-color-hover: #ffffff;
+  --button-background-hover: #808080;
+  --button-color-active: #000000;
+  --button-background-active: #ffffff;
+
+  /* Motion durations (DESIGN.md §7.2) */
+  --transition-duration: 0.4s;
+  --transition-duration-slow: 0.6s;
+
+  /* Grid (DESIGN.md §4.1) */
+  --grid-edge: 16px;
+  --grid-gutter: 20px;
 }
 
 .dark {
-  --background: oklch(0.14 0.01 240);
-  --foreground: oklch(0.96 0.01 250);
-  --card: oklch(0.19 0.015 250);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.19 0.015 250);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.78 0.14 178);
-  --primary-foreground: oklch(0.12 0.02 250);
-  --secondary: oklch(0.27 0.02 250);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.26 0.018 250);
-  --muted-foreground: oklch(0.74 0.02 250);
-  --accent: oklch(0.27 0.02 250);
-  --accent-foreground: oklch(0.985 0 0);
+  /* DESIGN.md signature pairing: #000 background + #C4C3B6 text */
+  --background: #000000;
+  --foreground: #c4c3b6;
+  --card: #000000;
+  --card-foreground: #c4c3b6;
+  --popover: #000000;
+  --popover-foreground: #c4c3b6;
+  --primary: #000000;
+  --primary-foreground: #dfdcd5;
+  --secondary: #1a1a1a; /* slight lift so shadcn surfaces don't disappear into bg */
+  --secondary-foreground: #c4c3b6;
+  --muted: #0a0a0a;
+  --muted-foreground: #a3a3a3;
+  --accent: #1a1a1a;
+  --accent-foreground: #c4c3b6;
+  /* Controlled exception per DESIGN.md §2.3: error path needs visibility */
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.76 0.15 178);
-  --chart-2: oklch(0.8 0.16 86);
-  --chart-3: oklch(0.7 0.16 25);
-  --chart-4: oklch(0.68 0.15 276);
-  --chart-5: oklch(0.68 0.12 205);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: #595855;
+  --input: #595855;
+  --ring: #c4c3b6;
+  /* Recharts contrast on black: high luminance */
+  --chart-1: #dfdcd5;
+  --chart-2: #c4c3b6;
+  --chart-3: #7e7d75;
+  --chart-4: #595855;
+  --chart-5: #e8d9a8;
+  --sidebar: #000000;
+  --sidebar-foreground: #c4c3b6;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #dfdcd5;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #c4c3b6;
+  --sidebar-border: #595855;
+  --sidebar-ring: #c4c3b6;
 }
 
 @layer base {
@@ -123,8 +219,71 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  /* DESIGN.md §3.2 — heading utility classes */
+  .c-heading-xxl {
+    font: 400 var(--text-heading-xxl) / 1 var(--font-serif);
+    letter-spacing: -0.03rem;
+  }
+  .c-heading-xl {
+    font: 400 var(--text-heading-xl) / 1 var(--font-serif);
+    letter-spacing: -0.03rem;
+  }
+  .c-heading-lg {
+    font: 400 var(--text-heading-lg) / 1 var(--font-serif);
+    letter-spacing: -0.03rem;
+  }
+  .c-heading-lg-s {
+    font: 400 var(--text-heading-lg-s) / 1 var(--font-serif);
+    letter-spacing: -0.03rem;
+  }
+  .c-heading-md {
+    font: 400 var(--text-heading-md) / 1.1 var(--font-serif);
+    letter-spacing: -0.03rem;
+  }
+  .c-heading-sm {
+    font: 400 var(--text-heading-sm) / 1.1 var(--font-serif);
+  }
+  .c-heading-xs {
+    font: 400 var(--text-heading-xs) / 1.1 var(--font-serif);
+  }
+  .c-body {
+    font: 400 var(--text-body) / 1.25 var(--font-sans);
+  }
+  .c-body-sm {
+    font: 400 var(--text-body-sm) / 1.25 var(--font-sans);
+  }
+  .c-link {
+    font: 400 var(--text-link) / 1.25 var(--font-sans);
+  }
+  .c-small {
+    font: 400 var(--text-small) / 1.25 var(--font-sans);
+  }
+
+  /* DESIGN.md §3.3 — uppercase headings, italic-keeps-case modifier */
+  .c-italic-no-uppercase {
+    text-transform: uppercase;
+    letter-spacing: -0.04rem;
+  }
+  .c-italic-no-uppercase em {
+    text-transform: none;
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  /* Italic-word emphasis: subtle size lift + breath. Used inside c-italic-no-uppercase. */
+  .c-italic-emphasis {
+    font-style: italic;
+    font-weight: 400;
+    font-size: 1.06em;
+    letter-spacing: 0;
   }
 }
