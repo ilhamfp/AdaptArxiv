@@ -2,6 +2,8 @@
 
 **Replicate, adapt, compare.**
 
+[Demo Video Link](https://www.loom.com/share/06a779660ded4e8284b7afe720427cae)
+
 AdaptArxiv turns research papers into rerunnable adaptation experiments. Drop in
 an arXiv link, let the system recover the experimental setup, adapt the training
 data, and rerun the research to see how the results change.
