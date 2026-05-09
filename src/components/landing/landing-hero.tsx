@@ -58,10 +58,32 @@ function SplitLine({
 export function LandingHero() {
   const router = useRouter();
   const [arxivUrl, setArxivUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    router.push("/dashboard");
+    if (!arxivUrl) return;
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ arxivUrl }),
+      });
+      if (response.ok) {
+        router.push("/dashboard");
+        return;
+      }
+      // Auth required or any other failure → bounce to dashboard with the URL
+      // pre-filled so the user can sign in and start there.
+      const params = new URLSearchParams({ arxivUrl });
+      router.push(`/dashboard?${params.toString()}`);
+    } catch {
+      const params = new URLSearchParams({ arxivUrl });
+      router.push(`/dashboard?${params.toString()}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -130,8 +152,12 @@ export function LandingHero() {
             aria-label="arXiv paper URL"
             className="h-12 w-full rounded-none border-0 border-b border-dark-grey bg-transparent px-4 pb-3 text-[15px] font-sans text-black placeholder:text-black/45 shadow-none transition-colors duration-[var(--transition-duration)] ease-[var(--ease-out-quad)] focus-visible:border-black focus-visible:ring-0 sm:flex-1"
           />
-          <DiamondButton type="submit" variant="primary">
-            adapt
+          <DiamondButton
+            type="submit"
+            variant="primary"
+            disabled={submitting || !arxivUrl}
+          >
+            {submitting ? "starting" : "adapt"}
           </DiamondButton>
         </motion.form>
       </div>

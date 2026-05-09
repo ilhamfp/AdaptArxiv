@@ -30,6 +30,12 @@ const RUN_ORDER: Record<TrainingSource, number> = {
   adaption_adapted_only: 2,
 };
 
+// Sources to hide from the comparison chart. The paired-raw run is a
+// methodological control (same row count as adapted, but raw); surfacing it
+// in the headline F1 chart makes the baseline vs adapted comparison harder
+// to read, so we keep it in run history but exclude it from bars.
+const CHART_HIDDEN_SOURCES = new Set<TrainingSource>(["paper_raw_paired"]);
+
 export function buildComparableBars(runs: RunResult[]): ComparableBars {
   if (runs.length === 0) {
     return { testSetHash: null, bars: [], rejected: [] };
@@ -57,6 +63,7 @@ export function buildComparableBars(runs: RunResult[]): ComparableBars {
   }
 
   const bars = Array.from(latestBySource.values())
+    .filter((run) => !CHART_HIDDEN_SOURCES.has(run.trainingSource))
     .sort((a, b) => RUN_ORDER[a.trainingSource] - RUN_ORDER[b.trainingSource])
     .map((run) => ({
       label: RUN_LABELS[run.trainingSource],
