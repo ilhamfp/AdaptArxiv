@@ -343,6 +343,207 @@ def fastapi_app():
             },
         }
 
+    @api.post("/paper-baseline")
+    def paper_baseline(request: RunRequest) -> dict[str, Any]:
+        started = time.perf_counter()
+        if request.fixture_mode:
+            return fixture_paper_proof(started, request)["runs"][0]
+
+        all_train_rows, test_rows = load_paper_dataset(request)
+        train_rows, valid_rows = split_paper_rows(
+            all_train_rows,
+            total_data=request.total_data,
+            valid_size=request.valid_size,
+            data_seed=request.data_seed,
+        )
+        score = train_and_score_paper_head(
+            train_rows, valid_rows, test_rows, request.model_seed
+        )
+        return paper_run_result(
+            "paper_raw_full",
+            score["f1"],
+            test_rows,
+            elapsed_ms(started),
+            experiment_metadata(
+                total_data=request.total_data,
+                train_rows=len(train_rows),
+                valid_rows=len(valid_rows),
+                test_rows=len(test_rows),
+                data_seed=request.data_seed,
+                model_seed=request.model_seed,
+            ),
+        )
+
+    @api.post("/paper-adaption")
+    def paper_adaption(request: RunRequest) -> dict[str, Any]:
+        if request.fixture_mode:
+            proof = fixture_paper_proof(time.perf_counter(), request)
+            adapted_run = proof["runs"][2]
+            return {
+                "runRequest": public_run_request(request),
+                "adapted": {
+                    "datasetId": adapted_run["adaption"]["datasetId"],
+                    "status": "succeeded",
+                    "rowCount": 430,
+                    "rowsReturned": adapted_run["validation"]["rowsReturned"],
+                    "rowsPassedValidation": adapted_run["validation"][
+                        "rowsPassedValidation"
+                    ],
+                    "drops": adapted_run["validation"]["drops"],
+                    "audit": adapted_run.get("audit"),
+                    "rows": [],
+                },
+                "adaption": adapted_run.get("adaption"),
+                "validation": adapted_run.get("validation"),
+            }
+
+        all_train_rows, test_rows = load_paper_dataset(request)
+        train_rows, _valid_rows = split_paper_rows(
+            all_train_rows,
+            total_data=request.total_data,
+            valid_size=request.valid_size,
+            data_seed=request.data_seed,
+        )
+        source_rows_for_adaption = train_rows[: request.max_rows]
+
+        if request.adaption_dataset_id:
+            adaption_result = resume_adaption(
+                request.adaption_dataset_id,
+                request.max_rows,
+                timeout_seconds=PAPER_ADAPTION_RUN_TIMEOUT_SECONDS,
+            )
+        else:
+            adaption_result = run_adaption(
+                source_rows_for_adaption,
+                request.max_rows,
+                timeout_seconds=PAPER_ADAPTION_RUN_TIMEOUT_SECONDS,
+            )
+        adaption_result["uploaded_rows"] = len(source_rows_for_adaption)
+
+        adapted_rows, drops, inspected_rows = validate_paper_adapted_rows(
+            adaption_result["rows"], source_rows_for_adaption, test_rows
+        )
+        audit = build_adaption_audit(
+            source_rows=source_rows_for_adaption,
+            test_rows=test_rows,
+            adaption_result=adaption_result,
+            passed_rows=adapted_rows,
+            drops=drops,
+        )
+        validation = {
+            "rowsRequested": int(adaption_result.get("rows_requested", request.max_rows)),
+            "rowsReturned": len(adaption_result["rows"]),
+            "rowsPassedValidation": len(adapted_rows),
+            "drops": drops,
+        }
+        adaption = {
+            "datasetId": adaption_result["dataset_id"],
+            "scoreBefore": adaption_result.get("score_before"),
+            "scoreAfter": adaption_result.get("score_after"),
+            "improvementPercent": adaption_result.get("improvement_percent"),
+        }
+        return {
+            "runRequest": public_run_request(request),
+            "adapted": {
+                "datasetId": adaption_result["dataset_id"],
+                "status": "succeeded",
+                "rowCount": adaption_result.get("ingested_rows"),
+                "rowsReturned": len(adaption_result["rows"]),
+                "rowsPassedValidation": len(adapted_rows),
+                "drops": drops,
+                "audit": audit,
+                "adaption": adaption,
+                "rows": inspected_rows[:24],
+            },
+            "adaption": adaption,
+            "validation": validation,
+        }
+
+    @api.post("/paper-adapted-run")
+    def paper_adapted_run(request: RunRequest) -> dict[str, Any]:
+        started = time.perf_counter()
+        if request.fixture_mode:
+            proof = fixture_paper_proof(started, request)
+            return {
+                "runs": proof["runs"][1:],
+                "datasetPreview": proof["datasetPreview"],
+            }
+        if not request.adaption_dataset_id:
+            raise ValueError("adaption_dataset_id is required for paper-adapted-run")
+
+        all_train_rows, test_rows = load_paper_dataset(request)
+        train_rows, valid_rows = split_paper_rows(
+            all_train_rows,
+            total_data=request.total_data,
+            valid_size=request.valid_size,
+            data_seed=request.data_seed,
+        )
+        source_rows_for_adaption = train_rows[: request.max_rows]
+        adaption_result = resume_adaption(
+            request.adaption_dataset_id,
+            request.max_rows,
+            timeout_seconds=PAPER_ADAPTION_RUN_TIMEOUT_SECONDS,
+        )
+        adaption_result["uploaded_rows"] = len(source_rows_for_adaption)
+        adapted_rows, drops, inspected_rows = validate_paper_adapted_rows(
+            adaption_result["rows"], source_rows_for_adaption, test_rows
+        )
+        audit = build_adaption_audit(
+            source_rows=source_rows_for_adaption,
+            test_rows=test_rows,
+            adaption_result=adaption_result,
+            passed_rows=adapted_rows,
+            drops=drops,
+        )
+        paired_raw_rows = build_paired_raw_rows(source_rows_for_adaption, adapted_rows)
+        base_metadata = {
+            "total_data": request.total_data,
+            "valid_rows": len(valid_rows),
+            "test_rows": len(test_rows),
+            "data_seed": request.data_seed,
+            "model_seed": request.model_seed,
+        }
+        paired_score = train_and_score_paper_head(
+            paired_raw_rows, valid_rows, test_rows, request.model_seed
+        )
+        adapted_score = train_and_score_paper_head(
+            adapted_rows, valid_rows, test_rows, request.model_seed
+        )
+        paired_raw = paper_run_result(
+            "paper_raw_paired",
+            paired_score["f1"],
+            test_rows,
+            elapsed_ms(started),
+            experiment_metadata(train_rows=len(paired_raw_rows), **base_metadata),
+        )
+        adapted = paper_run_result(
+            "adaption_adapted_only",
+            adapted_score["f1"],
+            test_rows,
+            elapsed_ms(started),
+            experiment_metadata(train_rows=len(adapted_rows), **base_metadata),
+            validation={
+                "rowsRequested": int(adaption_result.get("rows_requested", request.max_rows)),
+                "rowsReturned": len(adaption_result["rows"]),
+                "rowsPassedValidation": len(adapted_rows),
+                "drops": drops,
+            },
+            adaption={
+                "datasetId": adaption_result["dataset_id"],
+                "scoreBefore": adaption_result.get("score_before"),
+                "scoreAfter": adaption_result.get("score_after"),
+                "improvementPercent": adaption_result.get("improvement_percent"),
+            },
+            audit=audit,
+        )
+        return {
+            "runs": [paired_raw, adapted],
+            "datasetPreview": {
+                "raw": preview_paper_raw_rows(paired_raw_rows, 24),
+                "adapted": inspected_rows[:24],
+            },
+        }
+
     @api.post("/baseline")
     def baseline(request: RunRequest) -> dict[str, Any]:
         started = time.perf_counter()

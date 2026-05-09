@@ -67,6 +67,13 @@ export function buildComparableBars(runs: RunResult[]): ComparableBars {
   return { testSetHash, bars, rejected };
 }
 
+export function buildComparableBarsForJob(
+  runs: RunResult[],
+  jobId: string
+): ComparableBars {
+  return buildComparableBars(runs.filter((run) => run.jobId === jobId));
+}
+
 export function formatMetric(value: number): string {
   return value.toFixed(3);
 }

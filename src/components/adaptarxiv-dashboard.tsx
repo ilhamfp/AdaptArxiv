@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   Activity,
   AlertTriangle,
   BadgeCheck,
   Beaker,
+  Bot,
+  Clock,
   Database,
+  ExternalLink,
   FileText,
   KeyRound,
   Loader2,
   Lock,
   Play,
   RefreshCw,
+  RotateCcw,
   Rows3,
+  Search,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -53,11 +58,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { buildComparableBars, formatMetric } from "@/lib/charting";
 import {
   datasetPreviewSchema,
+  jobDetailSchema,
+  jobSummarySchema,
   modalRunResultSchema,
   paperManifestSchema,
   type DatasetPreview,
+  type JobDetail,
+  type JobSummary,
   type PaperManifest,
   type RunResult,
+  type StageKey,
 } from "@/lib/contracts";
 import { ACTIVE_RECIPES, BLUEPRINT_INSTRUCTION } from "@/lib/paper";
 
@@ -99,6 +109,10 @@ export function AdaptArxivDashboard() {
   const [paper, setPaper] = useState<PaperManifest | null>(null);
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
+  const [arxivUrl, setArxivUrl] = useState("https://arxiv.org/abs/2009.05713");
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -108,36 +122,27 @@ export function AdaptArxivDashboard() {
   const [mounted, setMounted] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setMounted(true));
-    startTransition(() => {
-      void refreshAll();
-    });
-    return () => cancelAnimationFrame(frame);
+  const loadJobDetail = useCallback(async (jobId: string) => {
+    const detail = jobDetailSchema.parse(await fetchJson(`/api/jobs/${jobId}`));
+    setJobDetail(detail);
   }, []);
 
-  const comparable = useMemo(() => buildComparableBars(runs), [runs]);
-  const latestAdapted = runs.find(
-    (run) =>
-      run.trainingSource === "adaption_adapted_only" ||
-      run.trainingSource === "adaption_id_aug"
-  );
-  const latestBaseline = runs.find(
-    (run) =>
-      run.trainingSource === "paper_raw_full" ||
-      run.trainingSource === "indonesian_only"
-  );
-
-  async function refreshAll() {
+  const refreshAll = useCallback(async () => {
     setError(null);
     try {
-      const [paperResponse, runsResponse, sessionResponse, healthResponse] =
-        await Promise.all([
-          fetchJson("/api/paper"),
-          fetchJson("/api/runs"),
-          fetchJson("/api/session"),
-          fetchJson("/api/health"),
-        ]);
+      const [
+        paperResponse,
+        runsResponse,
+        sessionResponse,
+        healthResponse,
+        jobsResponse,
+      ] = await Promise.all([
+        fetchJson("/api/paper"),
+        fetchJson("/api/runs"),
+        fetchJson("/api/session"),
+        fetchJson("/api/health"),
+        fetchJson("/api/jobs"),
+      ]);
 
       setPaper(paperManifestSchema.parse(paperResponse));
       setRuns(
@@ -149,10 +154,58 @@ export function AdaptArxivDashboard() {
         Boolean((sessionResponse as { authenticated?: boolean }).authenticated)
       );
       setHealth(healthResponse as Health);
+      const parsedJobs = ((jobsResponse as { jobs?: unknown[] }).jobs ?? []).map(
+        (job) => jobSummarySchema.parse(job)
+      );
+      setJobs(parsedJobs);
+      const nextJobId =
+        selectedJobId && parsedJobs.some((job) => job.id === selectedJobId)
+          ? selectedJobId
+          : (parsedJobs[0]?.id ?? null);
+      setSelectedJobId(nextJobId);
+      if (nextJobId) {
+        await loadJobDetail(nextJobId);
+      } else {
+        setJobDetail(null);
+      }
     } catch (caught) {
       setError(errorMessage(caught));
     }
-  }
+  }, [loadJobDetail, selectedJobId]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMounted(true));
+    startTransition(() => {
+      void refreshAll();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [refreshAll, startTransition]);
+
+  useEffect(() => {
+    if (!selectedJobId) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      void refreshAll();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [refreshAll, selectedJobId]);
+
+  const activeRuns = useMemo(
+    () => (selectedJobId ? (jobDetail?.runs ?? []) : runs),
+    [jobDetail?.runs, runs, selectedJobId]
+  );
+  const comparable = useMemo(() => buildComparableBars(activeRuns), [activeRuns]);
+  const latestAdapted = activeRuns.find(
+    (run) =>
+      run.trainingSource === "adaption_adapted_only" ||
+      run.trainingSource === "adaption_id_aug"
+  );
+  const latestBaseline = activeRuns.find(
+    (run) =>
+      run.trainingSource === "paper_raw_full" ||
+      run.trainingSource === "indonesian_only"
+  );
 
   async function signIn() {
     setBusyAction("session");
@@ -164,6 +217,57 @@ export function AdaptArxivDashboard() {
         body: JSON.stringify({ password }),
       });
       setPassword("");
+      await refreshAll();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function startJob() {
+    setBusyAction("job");
+    setError(null);
+    try {
+      const response = (await fetchJson("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ arxivUrl }),
+      })) as { jobId?: string };
+      if (!response.jobId) {
+        throw new Error("Job creation did not return an id");
+      }
+      setSelectedJobId(response.jobId);
+      await refreshAll();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function selectJob(jobId: string) {
+    setSelectedJobId(jobId);
+    setError(null);
+    try {
+      await loadJobDetail(jobId);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  async function retryStage(stageKey: StageKey) {
+    if (!selectedJobId) {
+      return;
+    }
+    setBusyAction(`retry-${stageKey}`);
+    setError(null);
+    try {
+      await fetchJson(`/api/jobs/${selectedJobId}/retry`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stageKey }),
+      });
       await refreshAll();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -215,7 +319,8 @@ export function AdaptArxivDashboard() {
     setPreviewLoading(true);
     setError(null);
     try {
-      const datasetId = latestAdapted?.adaption?.datasetId;
+      const datasetId =
+        latestAdapted?.adaption?.datasetId ?? jobDetail?.adaptedDataset?.datasetId;
       const preview = datasetPreviewSchema.parse(
         await fetchJson("/api/dataset-preview", {
           method: "POST",
@@ -257,9 +362,37 @@ export function AdaptArxivDashboard() {
                 AdaptArxiv
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
-                Recreate a controlled Indonesian sentiment baseline, adapt only
-                the training rows, and compare F1 on the same frozen test set.
+                Drop in an arXiv paper, let the agent extract the reproducible
+                setup, then watch Adaption and Modal runs converge into one
+                comparable result.
               </p>
+              <form
+                className="mt-5 flex max-w-2xl flex-col gap-2 sm:flex-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void startJob();
+                }}
+              >
+                <Input
+                  type="url"
+                  value={arxivUrl}
+                  onChange={(event) => setArxivUrl(event.target.value)}
+                  placeholder="https://arxiv.org/abs/2009.05713"
+                  className="h-11"
+                />
+                <Button
+                  type="submit"
+                  disabled={!authenticated || busyAction !== null || !arxivUrl}
+                  className="h-11 gap-2 sm:w-44"
+                >
+                  {busyAction === "job" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Search className="size-4" />
+                  )}
+                  Start job
+                </Button>
+              </form>
             </div>
 
             <div className="grid gap-3 sm:min-w-96">
@@ -316,6 +449,13 @@ export function AdaptArxivDashboard() {
 
       <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-5">
+          <JobTimeline
+            jobDetail={jobDetail}
+            authenticated={authenticated}
+            busyAction={busyAction}
+            onRetry={(stageKey) => void retryStage(stageKey)}
+          />
+
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
@@ -324,8 +464,9 @@ export function AdaptArxivDashboard() {
                   Same-runner F1
                 </CardTitle>
                 <CardDescription>
-                  The Indonesian test set is never adapted. Only training data
-                  changes.
+                  {selectedJobId
+                    ? "Scoped to the selected agent job. The Indonesian test set is never adapted."
+                    : "The Indonesian test set is never adapted. Only training data changes."}
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -429,13 +570,17 @@ export function AdaptArxivDashboard() {
 
           <Tabs defaultValue="runs" className="w-full">
             <TabsList>
+              <TabsTrigger value="events">Job events</TabsTrigger>
               <TabsTrigger value="runs">Run history</TabsTrigger>
               <TabsTrigger value="validation">Validation</TabsTrigger>
               <TabsTrigger value="data">Data inspect</TabsTrigger>
               <TabsTrigger value="spec">Specification</TabsTrigger>
             </TabsList>
+            <TabsContent value="events">
+              <JobEvents events={jobDetail?.events ?? []} />
+            </TabsContent>
             <TabsContent value="runs">
-              <RunHistory runs={runs} loading={isPending} />
+              <RunHistory runs={activeRuns} loading={isPending} />
             </TabsContent>
             <TabsContent value="validation">
               <ValidationPanel run={latestAdapted} />
@@ -456,7 +601,12 @@ export function AdaptArxivDashboard() {
         </div>
 
         <aside className="grid content-start gap-5">
-          <ManifestPanel paper={paper} />
+          <JobList
+            jobs={jobs}
+            selectedJobId={selectedJobId}
+            onSelect={(jobId) => void selectJob(jobId)}
+          />
+          <ManifestPanel paper={paper} jobDetail={jobDetail} />
           <MetricPanel baseline={latestBaseline} adapted={latestAdapted} />
           <Card>
             <CardHeader>
@@ -485,6 +635,186 @@ export function AdaptArxivDashboard() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function JobTimeline({
+  jobDetail,
+  authenticated,
+  busyAction,
+  onRetry,
+}: {
+  jobDetail: JobDetail | null;
+  authenticated: boolean;
+  busyAction: string | null;
+  onRetry: (stageKey: StageKey) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="size-5 text-primary" />
+            Agent job
+          </CardTitle>
+          <CardDescription>
+            Cursor extracts the paper, Adaption prepares data, and Modal runs
+            raw and adapted experiments from Convex state.
+          </CardDescription>
+        </div>
+        {jobDetail ? (
+          <Badge variant={jobDetail.job.status === "failed" ? "destructive" : "default"}>
+            {jobDetail.job.status.replaceAll("_", " ")}
+          </Badge>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {!jobDetail ? (
+          <div className="rounded-lg border border-white/10 bg-background/50 p-6 text-sm text-muted-foreground">
+            Unlock the demo and start with an arXiv URL to create a tracked
+            Convex job.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-5">
+            {jobDetail.stages.map((stage) => (
+              <div
+                key={stage.stageKey}
+                className="rounded-lg border border-white/10 bg-background/60 p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">{stageLabel(stage.stageKey)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      attempt {stage.attempt}
+                    </p>
+                  </div>
+                  <Badge variant={stageStatusVariant(stage.status)}>
+                    {stage.status}
+                  </Badge>
+                </div>
+                {stage.error ? (
+                  <p className="mt-3 line-clamp-3 text-xs text-destructive">
+                    {stage.error}
+                  </p>
+                ) : null}
+                {stage.retryable ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-3 w-full gap-2"
+                    disabled={
+                      !authenticated || busyAction === `retry-${stage.stageKey}`
+                    }
+                    onClick={() => onRetry(stage.stageKey)}
+                  >
+                    {busyAction === `retry-${stage.stageKey}` ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="size-3.5" />
+                    )}
+                    Retry
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobEvents({ events }: { events: JobDetail["events"] }) {
+  return (
+    <Card>
+      <CardContent className="grid gap-3 p-4">
+        {events.length === 0 ? (
+          <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
+            No job events yet
+          </div>
+        ) : (
+          events.map((event) => (
+            <div
+              key={event.id}
+              className="flex gap-3 rounded-lg border border-white/10 bg-background/60 p-3 text-sm"
+            >
+              <Clock className="mt-0.5 size-4 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={event.level === "error" ? "destructive" : "outline"}>
+                    {event.level}
+                  </Badge>
+                  {event.stageKey ? (
+                    <span className="text-xs text-muted-foreground">
+                      {stageLabel(event.stageKey)}
+                    </span>
+                  ) : null}
+                  <span className="text-xs text-muted-foreground">
+                    {formatTimestamp(event.createdAt)}
+                  </span>
+                </div>
+                <p className="mt-2 text-muted-foreground">{event.message}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobList({
+  jobs,
+  selectedJobId,
+  onSelect,
+}: {
+  jobs: JobSummary[];
+  selectedJobId: string | null;
+  onSelect: (jobId: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bot className="size-5 text-primary" />
+          Jobs
+        </CardTitle>
+        <CardDescription>Convex-backed paper reproduction attempts.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {jobs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No jobs created yet.</p>
+        ) : (
+          jobs.map((job) => (
+            <button
+              key={job.id}
+              type="button"
+              onClick={() => onSelect(job.id)}
+              className={`rounded-lg border p-3 text-left text-sm transition ${
+                selectedJobId === job.id
+                  ? "border-primary/60 bg-primary/10"
+                  : "border-white/10 bg-background/60 hover:border-white/20"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {job.title ?? `arXiv:${job.arxivId}`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {job.currentStage ? stageLabel(job.currentStage) : "created"} -{" "}
+                    {formatTimestamp(job.createdAt)}
+                  </p>
+                </div>
+                <Badge variant={job.status === "failed" ? "destructive" : "outline"}>
+                  {job.status.replaceAll("_", " ")}
+                </Badge>
+              </div>
+            </button>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -524,7 +854,18 @@ function StatusStrip({
   );
 }
 
-function ManifestPanel({ paper }: { paper: PaperManifest | null }) {
+function ManifestPanel({
+  paper,
+  jobDetail,
+}: {
+  paper: PaperManifest | null;
+  jobDetail: JobDetail | null;
+}) {
+  const manifest = jobDetail?.manifest;
+  const title = manifest?.title ?? paper?.title ?? "Loading manifest";
+  const authors =
+    manifest?.authors?.length ? manifest.authors.join(", ") : paper?.authors.join(", ");
+
   return (
     <Card>
       <CardHeader>
@@ -533,27 +874,49 @@ function ManifestPanel({ paper }: { paper: PaperManifest | null }) {
           Paper manifest
         </CardTitle>
         <CardDescription>
-          Extracted values are hardcoded for the demo paper.
+          {manifest ? "Extracted by the Cursor agent." : "Fallback demo manifest."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div>
-          <p className="font-medium">{paper?.title ?? "Loading manifest"}</p>
+          <p className="font-medium">{title}</p>
           <p className="mt-1 text-muted-foreground">
-            {paper?.authors.join(", ") ??
-              "Ilham Firdausi Putra, Ayu Purwarianti"}
+            {authors ?? "Ilham Firdausi Putra, Ayu Purwarianti"}
           </p>
         </div>
         <div className="grid gap-2 text-muted-foreground">
           <Badge variant="outline" className="w-fit">
-            reported in paper
+            {manifest ? `${Math.round(manifest.confidence * 100)}% confidence` : "reported in paper"}
           </Badge>
           <p>
             Task:{" "}
-            {paper?.baselineTask ?? "Binary Indonesian sentiment classification"}
+            {manifest?.technique.task ??
+              paper?.baselineTask ??
+              "Binary Indonesian sentiment classification"}
           </p>
-          <p>Metric: {paper?.baselineMetric?.toUpperCase() ?? "F1"}</p>
-          <p>Reference: XLM-R best ~{paper?.reportedReferenceF1 ?? 0.79}</p>
+          <p>
+            Technique: {manifest?.technique.name ?? manifest?.technique.model ?? "XLM-R"}
+          </p>
+          <p>
+            Metric:{" "}
+            {manifest?.reportedBaseline.metricName.toUpperCase() ??
+              paper?.baselineMetric?.toUpperCase() ??
+              "F1"}
+          </p>
+          <p>
+            Reference: XLM-R best ~
+            {manifest?.reportedBaseline.metricValue ??
+              paper?.reportedReferenceF1 ??
+              0.79}
+          </p>
+          <a
+            href={manifest?.absUrl ?? "https://arxiv.org/abs/2009.05713"}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-1 text-primary"
+          >
+            arXiv source <ExternalLink className="size-3.5" />
+          </a>
         </div>
       </CardContent>
     </Card>
@@ -683,6 +1046,41 @@ function runLabel(source: RunResult["trainingSource"]): string {
     adaption_adapted_only: "Adaption adapted-only",
   };
   return labels[source];
+}
+
+function stageLabel(stage: StageKey): string {
+  const labels: Record<StageKey, string> = {
+    paper_extract: "Paper extraction",
+    adaption_run: "Adaption data",
+    baseline_run: "Raw baseline",
+    adapted_run: "Adapted run",
+    finalize: "Final result",
+  };
+  return labels[stage];
+}
+
+function stageStatusVariant(
+  status: JobDetail["stages"][number]["status"]
+): "default" | "secondary" | "outline" | "destructive" {
+  if (status === "succeeded") {
+    return "default";
+  }
+  if (status === "failed") {
+    return "destructive";
+  }
+  if (status === "running") {
+    return "secondary";
+  }
+  return "outline";
+}
+
+function formatTimestamp(value: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
 }
 
 function ValidationPanel({ run }: { run?: RunResult }) {

@@ -1,5 +1,31 @@
 import { z } from "zod";
 
+export const stageKeySchema = z.enum([
+  "paper_extract",
+  "adaption_run",
+  "baseline_run",
+  "adapted_run",
+  "finalize",
+]);
+
+export const stageStatusSchema = z.enum([
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+  "blocked",
+  "skipped",
+]);
+
+export const jobStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "blocked",
+  "partial_failed",
+]);
+
 export const trainingSourceSchema = z.enum([
   "indonesian_only",
   "adaption_id_aug",
@@ -88,6 +114,7 @@ export const experimentMetadataSchema = z.object({
 });
 
 export const modalRunResultSchema = z.object({
+  jobId: z.string().optional(),
   trainingSource: trainingSourceSchema,
   metricName: z.literal("f1"),
   metricValue: z.number().min(0).max(1),
@@ -124,6 +151,129 @@ export type ExperimentMetadata = z.infer<typeof experimentMetadataSchema>;
 export type RunResult = z.infer<typeof runResultSchema>;
 export type PaperManifest = z.infer<typeof paperManifestSchema>;
 
+export const extractedPaperManifestSchema = z.object({
+  arxivId: z.string(),
+  absUrl: z.string().url(),
+  pdfUrl: z.string().url(),
+  title: z.string().min(1),
+  authors: z.array(z.string()),
+  abstract: z.string().optional(),
+  datasetCandidates: z.array(
+    z.object({
+      name: z.string().optional(),
+      url: z.string().url().optional(),
+      description: z.string().optional(),
+    })
+  ),
+  technique: z.object({
+    name: z.string().optional(),
+    summary: z.string(),
+    model: z.string().optional(),
+    task: z.string().optional(),
+  }),
+  reportedBaseline: z.object({
+    metricName: z.string(),
+    metricValue: z.number().optional(),
+    notes: z.string().optional(),
+  }),
+  supportKey: z.string(),
+  supported: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  evidenceSnippets: z.array(z.string()),
+});
+
+export const jobSummarySchema = z.object({
+  id: z.string(),
+  arxivId: z.string(),
+  arxivUrl: z.string().url(),
+  absUrl: z.string().url(),
+  pdfUrl: z.string().url(),
+  title: z.string().optional(),
+  status: jobStatusSchema,
+  currentStage: stageKeySchema.optional(),
+  supportKey: z.string(),
+  supported: z.boolean(),
+  latestError: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const jobStageSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  stageKey: stageKeySchema,
+  status: stageStatusSchema,
+  attempt: z.number().int().nonnegative(),
+  startedAt: z.number().optional(),
+  completedAt: z.number().optional(),
+  error: z.string().optional(),
+  retryable: z.boolean().optional(),
+  output: z.unknown().optional(),
+  updatedAt: z.number(),
+});
+
+export const jobEventSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  stageKey: stageKeySchema.optional(),
+  level: z.enum(["info", "warn", "error"]),
+  message: z.string(),
+  payload: z.unknown().optional(),
+  createdAt: z.number(),
+});
+
+export const datasetPreviewRowSchema = z.object({
+  rowIndex: z.number().int().positive(),
+  sourceId: z.string().optional(),
+  text: z.string().optional(),
+  originalText: z.string().nullable().optional(),
+  preprocessedOriginalText: z.string().nullable().optional(),
+  adaptedTextRaw: z.string().nullable().optional(),
+  adaptedText: z.string().optional(),
+  preprocessedAdaptedText: z.string().nullable().optional(),
+  label: z.string(),
+  status: z.string().optional(),
+  dropReason: z.string().nullable().optional(),
+  outputShape: z.string().optional(),
+  parseStatus: z.string().optional(),
+  generatedLabel: z.string().nullable().optional(),
+});
+
+export const adaptedDatasetRecordSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  datasetId: z.string(),
+  status: z.string(),
+  rowCount: z.number().nullable().optional(),
+  rowsReturned: z.number().int().nonnegative(),
+  rowsPassedValidation: z.number().int().nonnegative(),
+  drops: z.record(z.string(), z.number().int().nonnegative()),
+  audit: adaptionAuditSchema.optional(),
+  adaption: adaptionSummarySchema.optional(),
+  previewRows: z.array(datasetPreviewRowSchema).optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const jobDetailSchema = z.object({
+  job: jobSummarySchema,
+  manifest: extractedPaperManifestSchema.optional(),
+  stages: z.array(jobStageSchema),
+  events: z.array(jobEventSchema),
+  runs: z.array(runResultSchema),
+  adaptedDataset: adaptedDatasetRecordSchema.optional(),
+});
+
+export type StageKey = z.infer<typeof stageKeySchema>;
+export type StageStatus = z.infer<typeof stageStatusSchema>;
+export type JobStatus = z.infer<typeof jobStatusSchema>;
+export type ExtractedPaperManifest = z.infer<typeof extractedPaperManifestSchema>;
+export type JobSummary = z.infer<typeof jobSummarySchema>;
+export type JobStage = z.infer<typeof jobStageSchema>;
+export type JobEvent = z.infer<typeof jobEventSchema>;
+export type AdaptedDatasetRecord = z.infer<typeof adaptedDatasetRecordSchema>;
+export type JobDetail = z.infer<typeof jobDetailSchema>;
+
 export function normalizeRunResult(input: unknown): RunResult {
   return runResultSchema.parse(input);
 }
@@ -150,23 +300,6 @@ export type RunRequest = z.infer<typeof runRequestSchema>;
 export const datasetPreviewRequestSchema = runRequestSchema.extend({
   limit: z.number().int().positive().max(100).default(24),
   adaption_dataset_id: z.string().min(1).optional(),
-});
-
-export const datasetPreviewRowSchema = z.object({
-  rowIndex: z.number().int().positive(),
-  sourceId: z.string().optional(),
-  text: z.string().optional(),
-  originalText: z.string().nullable().optional(),
-  preprocessedOriginalText: z.string().nullable().optional(),
-  adaptedTextRaw: z.string().nullable().optional(),
-  adaptedText: z.string().optional(),
-  preprocessedAdaptedText: z.string().nullable().optional(),
-  label: z.string(),
-  status: z.string().optional(),
-  dropReason: z.string().nullable().optional(),
-  outputShape: z.string().optional(),
-  parseStatus: z.string().optional(),
-  generatedLabel: z.string().nullable().optional(),
 });
 
 export const datasetPreviewSchema = z.object({

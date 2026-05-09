@@ -1,5 +1,5 @@
-import { LandingHero } from "@/components/landing/landing-hero";
+import { AdaptArxivDashboard } from "@/components/adaptarxiv-dashboard";
 
 export default function Home() {
-  return <LandingHero />;
+  return <AdaptArxivDashboard />;
 }
