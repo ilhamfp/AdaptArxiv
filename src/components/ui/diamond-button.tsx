@@ -20,8 +20,10 @@ type DiamondButtonProps = {
 };
 
 const VARIANT_CLASSES: Record<Variant, string> = {
+  // Primary — for use on light backgrounds (DESIGN.md §6.2 default)
   primary:
-    "bg-linen text-black hover:bg-white active:bg-white",
+    "bg-black text-linen hover:bg-[#3a3a3a] hover:text-white active:bg-white active:text-black",
+  // Light — for use on dark backgrounds (inverse)
   light:
     "bg-linen text-black hover:bg-white active:bg-white",
   bordered:
@@ -42,7 +44,7 @@ export function DiamondButton({
     "items-center justify-center px-7",
     "text-[length:var(--button-font-size)] font-sans tracking-wide uppercase",
     "transition-[clip-path,background-color,color] duration-300 ease-[var(--ease-out-quad)]",
-    "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-grey",
+    "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-black",
     "select-none cursor-pointer overflow-hidden",
     VARIANT_CLASSES[variant],
     className,
@@ -68,7 +70,7 @@ export function DiamondButton({
           "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full",
           "bg-current opacity-0 scale-75",
           "transition-[transform,opacity] duration-300 ease-[var(--ease-out-quad)]",
-          active && "scale-[1.6] opacity-15",
+          active && "scale-[1.6] opacity-25",
         )}
       />
       <span className="relative">{children}</span>
@@ -78,7 +80,7 @@ export function DiamondButton({
           "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full",
           "bg-current opacity-0 scale-75",
           "transition-[transform,opacity] duration-300 ease-[var(--ease-out-quad)]",
-          active && "scale-[1.6] opacity-15",
+          active && "scale-[1.6] opacity-25",
         )}
       />
     </>
