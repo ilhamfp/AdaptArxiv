@@ -1,7 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { MotionProviders } from "@/providers/motion-providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -17,9 +15,10 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   themeColor: "#ebebeb",
   colorScheme: "light",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -33,29 +32,6 @@ export default function RootLayout({
       className={`${inter.variable} h-full antialiased`}
       style={{ colorScheme: "light" }}
     >
-      <head>
-        <link
-          rel="preload"
-          href="/fonts/TRJN-DaVinci-Regular.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preload"
-          href="/fonts/TRJN-DaVinci-Italic.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preload"
-          href="/fonts/TRJN-DaVinci-Medium.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-      </head>
       <body className="min-h-full flex flex-col bg-dust text-foreground">
         <a
           href="#main"
@@ -63,9 +39,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <MotionProviders>
-          <TooltipProvider>{children}</TooltipProvider>
-        </MotionProviders>
+        {children}
       </body>
     </html>
   );

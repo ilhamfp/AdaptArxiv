@@ -1,11 +1,9 @@
-"use client";
-
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 
 export function DashboardAppHeader() {
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between border-b border-dark-grey/20 bg-dust/85 px-5 py-4 backdrop-blur-md sm:px-8">
+    <header className="sticky top-0 z-40 flex items-center justify-between border-b border-dark-grey/20 bg-dust/85 px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md sm:px-8">
       <Link
         href="/"
         aria-label="AdaptArxiv home"

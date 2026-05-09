@@ -217,6 +217,14 @@
   * {
     @apply border-border outline-ring/50;
   }
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
@@ -265,6 +273,33 @@
   }
   .c-small {
     font: 400 var(--text-small) / 1.25 var(--font-sans);
+  }
+
+  @keyframes adaptarxiv-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .dashboard-enter {
+    animation: adaptarxiv-fade-up 0.5s var(--ease-out-quad) both;
+  }
+
+  .dashboard-enter-delayed {
+    animation-delay: 0.15s;
+    animation-duration: 0.6s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-enter,
+    .dashboard-enter-delayed {
+      animation: none;
+    }
   }
 
   /* DESIGN.md §3.3 — uppercase headings, italic-keeps-case modifier */

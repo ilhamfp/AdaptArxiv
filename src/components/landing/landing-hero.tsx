@@ -93,7 +93,7 @@ export function LandingHero() {
       className="relative h-dvh w-full overflow-hidden bg-dust text-black"
     >
       {/* Header — z-40 — items slide in from opposite edges (0–0.5s) */}
-      <header className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-5 py-5 sm:px-10">
+      <header className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-5 py-5 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-10">
         <motion.span
           translate="no"
           initial={{ opacity: 0, x: 30 }}
@@ -148,16 +148,16 @@ export function LandingHero() {
             required
             value={arxivUrl}
             onChange={(event) => setArxivUrl(event.target.value)}
-            placeholder="https://arxiv.org/abs/2009.05713"
+            placeholder="https://arxiv.org/abs/2009.05713…"
             aria-label="arXiv paper URL"
             className="h-12 w-full rounded-none border-0 border-b border-dark-grey bg-transparent px-4 pb-3 text-[15px] font-sans text-black placeholder:text-black/45 shadow-none transition-colors duration-[var(--transition-duration)] ease-[var(--ease-out-quad)] focus-visible:border-black focus-visible:ring-0 sm:flex-1"
           />
           <DiamondButton
             type="submit"
             variant="primary"
-            disabled={submitting || !arxivUrl}
+            disabled={submitting}
           >
-            {submitting ? "starting" : "adapt"}
+            {submitting ? "Starting…" : "Adapt"}
           </DiamondButton>
         </motion.form>
       </div>

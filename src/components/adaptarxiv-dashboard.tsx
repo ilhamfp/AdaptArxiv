@@ -1,7 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { motion } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
@@ -21,16 +21,6 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -54,22 +44,38 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { buildComparableBars, formatMetric } from "@/lib/charting";
 import {
-  datasetPreviewSchema,
-  jobDetailSchema,
-  jobSummarySchema,
-  modalRunResultSchema,
-  paperManifestSchema,
-  type DatasetPreview,
-  type JobDetail,
-  type JobSummary,
-  type PaperManifest,
-  type RunResult,
-  type StageKey,
+  buildComparableBars,
+  formatMetric,
+  type ComparableBars,
+} from "@/lib/charting";
+import type {
+  DatasetPreview,
+  JobDetail,
+  JobSummary,
+  PaperManifest,
+  RunResult,
+  StageKey,
 } from "@/lib/contracts";
 import { ACTIVE_RECIPES, BLUEPRINT_INSTRUCTION } from "@/lib/paper";
-import { EASE } from "@/lib/motion";
+
+const F1ComparisonChart = dynamic<{
+  comparable: ComparableBars;
+  referenceF1: number;
+}>(
+  () =>
+    import("@/components/dashboard/f1-comparison-chart").then(
+      (mod) => mod.F1ComparisonChart
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-80 min-h-80 items-center justify-center rounded-lg border border-dark-grey/15 bg-base-foreground c-body-sm text-light-grey">
+        Loading chart…
+      </div>
+    ),
+  }
+);
 
 type Health = {
   ok: boolean;
@@ -105,107 +111,162 @@ const LEGACY_RUN_REQUEST = {
   model_seed: 4,
 };
 
+const timestampFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+  month: "short",
+  day: "numeric",
+});
+
 type RunScope =
   | { kind: "job"; jobId: string }
   | { kind: "legacy-proof" };
 
-export function AdaptArxivDashboard() {
+type RefreshOptions = {
+  force?: boolean;
+};
+
+export function AdaptArxivDashboard({
+  initialArxivUrl = "https://arxiv.org/abs/2009.05713",
+}: {
+  initialArxivUrl?: string;
+}) {
   const [paper, setPaper] = useState<PaperManifest | null>(null);
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [selectedScope, setSelectedScope] = useState<RunScope | null>(null);
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
-  const [arxivUrl, setArxivUrl] = useState("https://arxiv.org/abs/2009.05713");
+  const [arxivUrl, setArxivUrl] = useState(initialArxivUrl);
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [dataPreview, setDataPreview] = useState<DatasetPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+
+  const fetchJobDetail = useCallback(async (jobId: string) => {
+    return (await fetchJson(`/api/jobs/${jobId}`)) as JobDetail;
+  }, []);
 
   const loadJobDetail = useCallback(async (jobId: string) => {
-    const detail = jobDetailSchema.parse(await fetchJson(`/api/jobs/${jobId}`));
-    setJobDetail(detail);
-  }, []);
+    setJobDetail(await fetchJobDetail(jobId));
+  }, [fetchJobDetail]);
 
   const selectedScopeRef = useRef<RunScope | null>(null);
   useEffect(() => {
     selectedScopeRef.current = selectedScope;
   }, [selectedScope]);
 
-  const refreshAll = useCallback(async () => {
-    setError(null);
-    try {
-      const [
-        paperResponse,
-        runsResponse,
-        sessionResponse,
-        healthResponse,
-        jobsResponse,
-      ] = await Promise.all([
-        fetchJson("/api/paper"),
-        fetchJson("/api/runs"),
-        fetchJson("/api/session"),
-        fetchJson("/api/health"),
-        fetchJson("/api/jobs"),
-      ]);
-
-      setPaper(paperManifestSchema.parse(paperResponse));
-      const parsedRuns = ((runsResponse as { runs?: unknown[] }).runs ?? []).map(
-        (run) => modalRunResultSchema.parse(run)
-      );
-      setRuns(parsedRuns);
-      setAuthenticated(
-        Boolean((sessionResponse as { authenticated?: boolean }).authenticated)
-      );
-      setHealth(healthResponse as Health);
-      const parsedJobs = ((jobsResponse as { jobs?: unknown[] }).jobs ?? []).map(
-        (job) => jobSummarySchema.parse(job)
-      );
-      setJobs(parsedJobs);
-      const legacyProofRuns = getLegacyProofRuns(parsedRuns);
-      const current = selectedScopeRef.current;
-      const keepCurrent =
-        (current?.kind === "legacy-proof" && legacyProofRuns.length > 0) ||
-        (current?.kind === "job" &&
-          parsedJobs.some((job) => job.id === current.jobId));
-      const nextScope: RunScope | null = keepCurrent
-        ? current
-        : parsedJobs[0]
-          ? { kind: "job", jobId: parsedJobs[0].id }
-          : legacyProofRuns.length > 0
-            ? { kind: "legacy-proof" }
-            : null;
-
-      // Only update state if the scope actually changed — avoids re-rendering
-      // and the polling-loop churn that flickered the UI.
-      if (
-        current?.kind !== nextScope?.kind ||
-        (current?.kind === "job" &&
-          nextScope?.kind === "job" &&
-          current.jobId !== nextScope.jobId)
-      ) {
-        setSelectedScope(nextScope);
-      }
-      if (nextScope?.kind === "job") {
-        await loadJobDetail(nextScope.jobId);
-      } else {
-        setJobDetail(null);
-      }
-    } catch (caught) {
-      setError(errorMessage(caught));
+  const refreshAll = useCallback(async (options: RefreshOptions = {}) => {
+    if (!options.force && refreshInFlightRef.current) {
+      await refreshInFlightRef.current;
+      return;
     }
-  }, [loadJobDetail]);
+
+    const refreshPromise = (async () => {
+      setError(null);
+      try {
+        const current = selectedScopeRef.current;
+        const activeJobDetailPromise =
+          current?.kind === "job"
+            ? fetchJobDetail(current.jobId)
+                .then((detail) => ({ status: "fulfilled" as const, detail }))
+                .catch((error: unknown) => ({
+                  status: "rejected" as const,
+                  error,
+                }))
+            : Promise.resolve(null);
+
+        const [
+          paperResponse,
+          runsResponse,
+          sessionResponse,
+          healthResponse,
+          jobsResponse,
+          activeJobDetailResult,
+        ] = await Promise.all([
+          fetchJson("/api/paper"),
+          fetchJson("/api/runs"),
+          fetchJson("/api/session"),
+          fetchJson("/api/health"),
+          fetchJson("/api/jobs"),
+          activeJobDetailPromise,
+        ]);
+
+        setPaper(paperResponse as PaperManifest);
+        const parsedRuns = (runsResponse as { runs?: RunResult[] }).runs ?? [];
+        setRuns(parsedRuns);
+        setAuthenticated(
+          Boolean((sessionResponse as { authenticated?: boolean }).authenticated)
+        );
+        setHealth(healthResponse as Health);
+        const parsedJobs = (jobsResponse as { jobs?: JobSummary[] }).jobs ?? [];
+        setJobs(parsedJobs);
+        const legacyProofRuns = getLegacyProofRuns(parsedRuns);
+        const keepCurrent =
+          (current?.kind === "legacy-proof" && legacyProofRuns.length > 0) ||
+          (current?.kind === "job" &&
+            parsedJobs.some((job) => job.id === current.jobId));
+        const nextScope: RunScope | null = keepCurrent
+          ? current
+          : parsedJobs[0]
+            ? { kind: "job", jobId: parsedJobs[0].id }
+            : legacyProofRuns.length > 0
+              ? { kind: "legacy-proof" }
+              : null;
+
+        // Only update state if the scope actually changed; this keeps polling
+        // from needlessly churning the selected job controls.
+        if (
+          current?.kind !== nextScope?.kind ||
+          (current?.kind === "job" &&
+            nextScope?.kind === "job" &&
+            current.jobId !== nextScope.jobId)
+        ) {
+          setSelectedScope(nextScope);
+        }
+
+        if (nextScope?.kind !== "job") {
+          setJobDetail(null);
+          return;
+        }
+
+        const canReuseParallelDetail =
+          current?.kind === "job" && current.jobId === nextScope.jobId;
+
+        if (canReuseParallelDetail && activeJobDetailResult?.status === "fulfilled") {
+          setJobDetail(activeJobDetailResult.detail);
+          return;
+        }
+
+        if (canReuseParallelDetail && activeJobDetailResult?.status === "rejected") {
+          throw activeJobDetailResult.error;
+        }
+
+        setJobDetail(await fetchJobDetail(nextScope.jobId));
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    })();
+
+    refreshInFlightRef.current = refreshPromise;
+
+    try {
+      await refreshPromise;
+    } finally {
+      if (refreshInFlightRef.current === refreshPromise) {
+        refreshInFlightRef.current = null;
+      }
+    }
+  }, [fetchJobDetail]);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setMounted(true));
     startTransition(() => {
       void refreshAll();
     });
-    return () => cancelAnimationFrame(frame);
   }, [refreshAll, startTransition]);
 
   useEffect(() => {
@@ -232,16 +293,34 @@ export function AdaptArxivDashboard() {
     [jobDetail?.runs, legacyProofRuns, runs, selectedJobId, selectedLegacyProof]
   );
   const comparable = useMemo(() => buildComparableBars(activeRuns), [activeRuns]);
-  const latestAdapted = activeRuns.find(
-    (run) =>
-      run.trainingSource === "adaption_adapted_only" ||
-      run.trainingSource === "adaption_id_aug"
-  );
-  const latestBaseline = activeRuns.find(
-    (run) =>
-      run.trainingSource === "paper_raw_full" ||
-      run.trainingSource === "indonesian_only"
-  );
+  const { latestAdapted, latestBaseline } = useMemo(() => {
+    let latestAdapted: RunResult | undefined;
+    let latestBaseline: RunResult | undefined;
+
+    for (const run of activeRuns) {
+      if (
+        !latestAdapted &&
+        (run.trainingSource === "adaption_adapted_only" ||
+          run.trainingSource === "adaption_id_aug")
+      ) {
+        latestAdapted = run;
+      }
+
+      if (
+        !latestBaseline &&
+        (run.trainingSource === "paper_raw_full" ||
+          run.trainingSource === "indonesian_only")
+      ) {
+        latestBaseline = run;
+      }
+
+      if (latestAdapted && latestBaseline) {
+        break;
+      }
+    }
+
+    return { latestAdapted, latestBaseline };
+  }, [activeRuns]);
 
   async function signIn() {
     setBusyAction("session");
@@ -253,7 +332,7 @@ export function AdaptArxivDashboard() {
         body: JSON.stringify({ password }),
       });
       setPassword("");
-      await refreshAll();
+      await refreshAll({ force: true });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -265,16 +344,25 @@ export function AdaptArxivDashboard() {
     setBusyAction("job");
     setError(null);
     try {
+      if (!authenticated) {
+        throw new Error("Sign in before starting a run.");
+      }
+
+      const trimmedArxivUrl = arxivUrl.trim();
+      if (!trimmedArxivUrl) {
+        throw new Error("Enter an arXiv paper URL.");
+      }
+
       const response = (await fetchJson("/api/jobs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ arxivUrl }),
+        body: JSON.stringify({ arxivUrl: trimmedArxivUrl }),
       })) as { jobId?: string };
       if (!response.jobId) {
         throw new Error("Job creation did not return an id");
       }
       setSelectedScope({ kind: "job", jobId: response.jobId });
-      await refreshAll();
+      await refreshAll({ force: true });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -310,7 +398,7 @@ export function AdaptArxivDashboard() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ stageKey }),
       });
-      await refreshAll();
+      await refreshAll({ force: true });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -322,13 +410,11 @@ export function AdaptArxivDashboard() {
     setBusyAction(endpoint);
     setError(null);
     try {
-      const result = modalRunResultSchema.parse(
-        await fetchJson(`/api/runs/${endpoint}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(LEGACY_RUN_REQUEST),
-        })
-      );
+      const result = (await fetchJson(`/api/runs/${endpoint}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(LEGACY_RUN_REQUEST),
+      })) as RunResult;
       setRuns((current) => [result, ...current]);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -346,9 +432,7 @@ export function AdaptArxivDashboard() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(RUN_REQUEST),
       })) as { runs?: unknown[] };
-      const parsedRuns = (response.runs ?? []).map((run) =>
-        modalRunResultSchema.parse(run)
-      );
+      const parsedRuns = (response.runs ?? []) as RunResult[];
       setRuns((current) => [...parsedRuns, ...current]);
       setSelectedScope({ kind: "legacy-proof" });
       setJobDetail(null);
@@ -365,17 +449,15 @@ export function AdaptArxivDashboard() {
     try {
       const datasetId =
         latestAdapted?.adaption?.datasetId ?? jobDetail?.adaptedDataset?.datasetId;
-      const preview = datasetPreviewSchema.parse(
-        await fetchJson("/api/dataset-preview", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            ...RUN_REQUEST,
-            limit: 24,
-            ...(datasetId ? { adaption_dataset_id: datasetId } : {}),
-          }),
-        })
-      );
+      const preview = (await fetchJson("/api/dataset-preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...RUN_REQUEST,
+          limit: 24,
+          ...(datasetId ? { adaption_dataset_id: datasetId } : {}),
+        }),
+      })) as DatasetPreview;
       setDataPreview(preview);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -386,12 +468,7 @@ export function AdaptArxivDashboard() {
 
   return (
     <main className="flex-1 bg-dust">
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: EASE }}
-        className="border-b border-dark-grey/20 bg-base-foreground"
-      >
+      <section className="dashboard-enter border-b border-dark-grey/20 bg-base-foreground">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-12 md:px-8 md:py-14">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
@@ -410,16 +487,26 @@ export function AdaptArxivDashboard() {
                   void startJob();
                 }}
               >
+                <label htmlFor="dashboard-arxiv-url" className="sr-only">
+                  arXiv paper URL
+                </label>
                 <Input
+                  id="dashboard-arxiv-url"
                   type="url"
+                  name="arxivUrl"
+                  autoComplete="url"
+                  inputMode="url"
+                  spellCheck={false}
+                  required
                   value={arxivUrl}
                   onChange={(event) => setArxivUrl(event.target.value)}
-                  placeholder="https://arxiv.org/abs/2009.05713"
+                  placeholder="https://arxiv.org/abs/2009.05713…"
+                  aria-label="arXiv paper URL"
                   className="h-11"
                 />
                 <Button
                   type="submit"
-                  disabled={!authenticated || busyAction !== null || !arxivUrl}
+                  disabled={busyAction !== null}
                   className="h-11 gap-2 sm:w-44"
                 >
                   {busyAction === "job" ? (
@@ -427,7 +514,7 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Search className="size-4" />
                   )}
-                  Start run
+                  Start Run
                 </Button>
               </form>
             </div>
@@ -450,17 +537,24 @@ export function AdaptArxivDashboard() {
                   tabIndex={-1}
                   className="sr-only"
                 />
+                <label htmlFor="dashboard-admin-password" className="sr-only">
+                  Demo admin password
+                </label>
                 <Input
+                  id="dashboard-admin-password"
                   type="password"
+                  name="password"
                   autoComplete="current-password"
                   placeholder="Password"
+                  required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  aria-label="Demo admin password"
                   className="h-10"
                 />
                 <Button
                   type="submit"
-                  disabled={busyAction === "session" || !password}
+                  disabled={busyAction === "session"}
                   className="h-10 gap-2"
                 >
                   {busyAction === "session" ? (
@@ -475,21 +569,16 @@ export function AdaptArxivDashboard() {
           </div>
 
           {error ? (
-            <Alert variant="destructive">
+            <Alert variant="destructive" role="alert">
               <AlertTriangle className="size-4" />
               <AlertTitle>Action failed</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
         </div>
-      </motion.section>
+      </section>
 
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
-        className="mx-auto grid max-w-7xl gap-5 px-5 py-8 md:px-8 lg:grid-cols-[280px_minmax(0,1fr)]"
-      >
+      <section className="dashboard-enter dashboard-enter-delayed mx-auto grid max-w-7xl gap-5 px-5 py-8 md:px-8 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="grid content-start gap-5 min-w-0 lg:sticky lg:top-24 lg:self-start">
           <JobList
             jobs={jobs}
@@ -543,7 +632,7 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Play className="size-4" />
                   )}
-                  Run baseline
+                  Run Baseline
                 </Button>
                 <Button
                   variant="secondary"
@@ -556,72 +645,15 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Sparkles className="size-4" />
                   )}
-                  Run adapted
+                  Run Adapted
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="h-80 min-w-0">
-                {mounted && comparable.bars.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={comparable.bars}
-                      margin={{ top: 18, right: 18, left: 0, bottom: 24 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="var(--ds-light-grey)"
-                        strokeOpacity={0.3}
-                      />
-                      <XAxis
-                        dataKey="label"
-                        tick={{
-                          fill: "var(--ds-light-grey)",
-                          fontSize: 12,
-                        }}
-                        interval={0}
-                      />
-                      <YAxis
-                        domain={[0, 1]}
-                        tick={{
-                          fill: "var(--ds-light-grey)",
-                          fontSize: 12,
-                        }}
-                      />
-                      <ChartTooltip
-                        cursor={{
-                          fill: "var(--ds-dark-grey)",
-                          fillOpacity: 0.06,
-                        }}
-                        formatter={(value) => [
-                          formatMetric(Number(value)),
-                          "F1",
-                        ]}
-                      />
-                      <ReferenceLine
-                        y={paper?.reportedReferenceF1 ?? 0.79}
-                        stroke="var(--ds-aged-binding)"
-                        strokeDasharray="6 4"
-                        label={{
-                          value: "Reference",
-                          fill: "var(--ds-aged-binding)",
-                          fontSize: 12,
-                          position: "insideTopRight",
-                        }}
-                      />
-                      <Bar
-                        dataKey="metricValue"
-                        fill="var(--ds-dark-grey)"
-                        radius={[6, 6, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-full items-center justify-center rounded-lg border border-dark-grey/15 bg-base-foreground c-body-sm text-light-grey">
-                    Awaiting first result
-                  </div>
-                )}
-              </div>
+              <F1ComparisonChart
+                comparable={comparable}
+                referenceF1={paper?.reportedReferenceF1 ?? 0.79}
+              />
               <div className="mt-4 flex flex-wrap items-center gap-2 c-body-sm text-light-grey">
                 <Badge variant="outline" className="font-mono">
                   evaluation set: {comparable.testSetHash ? comparable.testSetHash.slice(0, 12) : "—"}
@@ -695,7 +727,7 @@ export function AdaptArxivDashboard() {
             </TabsContent>
           </Tabs>
         </div>
-      </motion.section>
+      </section>
     </main>
   );
 }
@@ -997,7 +1029,10 @@ function StatusStrip({
   authenticated: boolean;
 }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
+      <div
+        className="grid gap-2 rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm"
+        aria-live="polite"
+      >
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-2 text-light-grey">
           <ShieldCheck className="size-4 text-light-grey" />
@@ -1171,7 +1206,7 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
                   colSpan={5}
                   className="h-24 text-center c-body-sm text-light-grey"
                 >
-                  {loading ? "Loading" : "No runs yet"}
+                  {loading ? "Loading…" : "No runs yet"}
                 </TableCell>
               </TableRow>
             ) : (
@@ -1242,12 +1277,7 @@ function stageStatusVariant(
 }
 
 function formatTimestamp(value: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
+  return timestampFormatter.format(new Date(value));
 }
 
 function ValidationPanel({ run }: { run?: RunResult }) {
@@ -1390,7 +1420,7 @@ function DataInspectionPanel({
           ) : (
             <RefreshCw className="size-4" />
           )}
-          Load samples
+          Load Samples
         </Button>
       </CardHeader>
       <CardContent className="grid gap-5">
@@ -1683,6 +1713,7 @@ function SpecificationPanel() {
       </CardHeader>
       <CardContent className="grid gap-4">
         <Textarea
+          aria-label="Adapter blueprint instruction"
           value={BLUEPRINT_INSTRUCTION}
           readOnly
           className="min-h-28 c-body-sm font-mono text-foreground"

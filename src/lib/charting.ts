@@ -41,25 +41,42 @@ export function buildComparableBars(runs: RunResult[]): ComparableBars {
     return { testSetHash: null, bars: [], rejected: [] };
   }
 
-  const scopedRuns = runs.some(
-    (run) => run.experiment?.experimentMode === "paper_faithful"
-  )
-    ? runs.filter((run) => run.experiment?.experimentMode === "paper_faithful")
-    : runs;
-
-  const testSetHash = scopedRuns[0]?.testSetHash ?? null;
-  if (!testSetHash) {
-    return { testSetHash: null, bars: [], rejected: [] };
+  let hasPaperFaithfulRuns = false;
+  for (const run of runs) {
+    if (run.experiment?.experimentMode === "paper_faithful") {
+      hasPaperFaithfulRuns = true;
+      break;
+    }
   }
 
-  const accepted = scopedRuns.filter((run) => run.testSetHash === testSetHash);
-  const rejected = scopedRuns.filter((run) => run.testSetHash !== testSetHash);
-
+  let testSetHash: string | null = null;
   const latestBySource = new Map<TrainingSource, RunResult>();
-  for (const run of accepted) {
+  const rejected: RunResult[] = [];
+
+  for (const run of runs) {
+    if (
+      hasPaperFaithfulRuns &&
+      run.experiment?.experimentMode !== "paper_faithful"
+    ) {
+      continue;
+    }
+
+    if (!testSetHash) {
+      testSetHash = run.testSetHash || null;
+    }
+
+    if (run.testSetHash !== testSetHash) {
+      rejected.push(run);
+      continue;
+    }
+
     if (!latestBySource.has(run.trainingSource)) {
       latestBySource.set(run.trainingSource, run);
     }
+  }
+
+  if (!testSetHash) {
+    return { testSetHash: null, bars: [], rejected: [] };
   }
 
   const bars = Array.from(latestBySource.values())
