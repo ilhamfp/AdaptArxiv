@@ -14,6 +14,7 @@ type Variant = "primary" | "light" | "bordered";
 type DiamondButtonProps = {
   href?: string;
   onClick?: () => void;
+  type?: "button" | "submit";
   children: React.ReactNode;
   className?: string;
   variant?: Variant;
@@ -33,6 +34,7 @@ const VARIANT_CLASSES: Record<Variant, string> = {
 export function DiamondButton({
   href,
   onClick,
+  type = "button",
   children,
   className,
   variant = "primary",
@@ -94,7 +96,7 @@ export function DiamondButton({
     );
   }
   return (
-    <button type="button" className={classes} style={style} {...handlers}>
+    <button type={type} className={classes} style={style} {...handlers}>
       {inner}
     </button>
   );
