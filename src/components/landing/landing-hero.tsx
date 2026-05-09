@@ -132,13 +132,16 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      {/* Wordmark — slides up from below over 1.0s, delayed 0.35s. Matches Structured's bottom-logo cadence. */}
+      {/* Wordmark — slides up from below over 1.0s, delayed 0.35s. Matches Structured's bottom-logo cadence.
+          On mobile the wordmark lifts well above the viewport bottom so its top
+          can peek above the deeply-pushed books; on desktop it stays anchored
+          to the bottom edge as before. */}
       <div
         translate="no"
-        className="absolute inset-x-0 bottom-0 z-10 translate-y-[12%] pointer-events-none"
+        className="absolute inset-x-0 bottom-[20%] translate-y-[4%] sm:bottom-0 sm:translate-y-[12%] z-10 pointer-events-none"
       >
         <motion.svg
-          viewBox="0 0 1440 240"
+          viewBox="0 0 1440 350"
           preserveAspectRatio="xMidYEnd meet"
           initial={{ y: "100%" }}
           animate={{ y: "0%" }}
@@ -148,12 +151,12 @@ export function LandingHero() {
         >
           <text
             x="50%"
-            y="80%"
+            y="78%"
             textAnchor="middle"
-            textLength="1080"
+            textLength="1380"
             lengthAdjust="spacingAndGlyphs"
             fontFamily="var(--font-serif), 'Times New Roman', serif"
-            fontSize="220"
+            fontSize="280"
             fontWeight="400"
           >
             AdaptArxiv
@@ -162,13 +165,14 @@ export function LandingHero() {
       </div>
 
       {/* Aged-books composite — fades up after wordmark begins (0.45–1.45s).
-          Outer div carries a static translate-y so the books sit slightly past
-          the viewport edge: small shift on desktop ("slightly down"), larger on
-          mobile so the source image's transparent bottom row gets clipped under
-          the viewport instead of leaving the books "hovering" above cream
-          background. Framer's y animation lives on the inner motion.div so the
+          Outer div carries a static translate-y so the books sit past the
+          viewport edge. On mobile the shift is large (so the wordmark's top
+          peeks above the towers AND the transparent bottom of the source image
+          is clipped under the viewport); on desktop the shift is enough to
+          drop the towers below the wordmark's top so the leading "A" is
+          visible. Framer's y animation lives on the inner motion.div so the
           two transforms don't collide. */}
-      <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] translate-y-[16%] sm:translate-y-[5%] pointer-events-none">
+      <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] translate-y-[36%] sm:translate-y-[24%] pointer-events-none">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
