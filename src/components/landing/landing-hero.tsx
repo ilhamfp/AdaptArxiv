@@ -162,52 +162,47 @@ export function LandingHero() {
         </motion.form>
       </div>
 
-      {/* Wordmark — slides up from below over 1.0s, delayed 0.35s. Matches Structured's bottom-logo cadence.
-          On mobile the wordmark lifts well above the viewport bottom so its top
-          can peek above the deeply-pushed books; on desktop it stays anchored
-          to the bottom edge as before. */}
+      {/* Bookscape — one shared anchor keeps the wordmark tucked behind the books
+          at every viewport height. The SVG text fades in place instead of
+          translating, avoiding iOS Safari's SVG text repaint trail. */}
       <div
-        translate="no"
-        className="absolute inset-x-0 bottom-[22%] translate-y-[3%] sm:bottom-[3%] sm:translate-y-[5%] z-10 pointer-events-none"
+        data-bookscape
+        className="absolute inset-x-0 bottom-0 z-10 h-[42%] translate-y-[36%] sm:translate-y-[32%] pointer-events-none"
       >
-        <motion.svg
-          viewBox="0 0 1440 400"
-          preserveAspectRatio="xMidYMax meet"
-          initial={{ y: "100%" }}
-          animate={{ y: "0%" }}
-          transition={{ duration: 1.0, delay: 0.35, ease: EASE }}
-          className="block w-full h-auto fill-black overflow-visible"
-          aria-hidden="true"
+        <div
+          data-wordmark
+          translate="no"
+          className="absolute inset-x-0 top-[-14%] z-10 sm:top-[-32%]"
         >
-          <text
-            x="50%"
-            y="78%"
-            textAnchor="middle"
-            textLength="1410"
-            lengthAdjust="spacingAndGlyphs"
-            fontFamily="var(--font-serif), 'Times New Roman', serif"
-            fontSize="310"
-            fontWeight="400"
+          <motion.svg
+            viewBox="0 0 1440 400"
+            preserveAspectRatio="xMidYMax meet"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.7, delay: 0.35, ease: EASE_OUT_EXPO }}
+            className="block w-full h-auto fill-black overflow-visible"
+            aria-hidden="true"
           >
-            AdaptArxiv
-          </text>
-        </motion.svg>
-      </div>
-
-      {/* Aged-books composite — fades up after wordmark begins (0.45–1.45s).
-          Outer div carries a static translate-y so the books sit past the
-          viewport edge. On mobile the shift is large (so the wordmark's top
-          peeks above the towers AND the transparent bottom of the source image
-          is clipped under the viewport); on desktop the shift is enough to
-          drop the towers below the wordmark's top so the leading "A" is
-          visible. Framer's y animation lives on the inner motion.div so the
-          two transforms don't collide. */}
-      <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] translate-y-[36%] sm:translate-y-[32%] pointer-events-none">
+            <text
+              x="50%"
+              y="78%"
+              textAnchor="middle"
+              textLength="1410"
+              lengthAdjust="spacingAndGlyphs"
+              fontFamily="var(--font-serif), 'Times New Roman', serif"
+              fontSize="310"
+              fontWeight="400"
+            >
+              AdaptArxiv
+            </text>
+          </motion.svg>
+        </div>
         <motion.div
+          data-books
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.0, delay: 0.45, ease: EASE }}
-          className="absolute inset-0"
+          className="absolute inset-0 z-20"
         >
           <Image
             src="/assets/aged-books.png"
