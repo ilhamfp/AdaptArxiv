@@ -105,12 +105,16 @@ const LEGACY_RUN_REQUEST = {
   model_seed: 4,
 };
 
+type RunScope =
+  | { kind: "job"; jobId: string }
+  | { kind: "legacy-proof" };
+
 export function AdaptArxivDashboard() {
   const [paper, setPaper] = useState<PaperManifest | null>(null);
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedScope, setSelectedScope] = useState<RunScope | null>(null);
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [arxivUrl, setArxivUrl] = useState("https://arxiv.org/abs/2009.05713");
   const [authenticated, setAuthenticated] = useState(false);
@@ -145,11 +149,10 @@ export function AdaptArxivDashboard() {
       ]);
 
       setPaper(paperManifestSchema.parse(paperResponse));
-      setRuns(
-        ((runsResponse as { runs?: unknown[] }).runs ?? []).map((run) =>
-          modalRunResultSchema.parse(run)
-        )
+      const parsedRuns = ((runsResponse as { runs?: unknown[] }).runs ?? []).map(
+        (run) => modalRunResultSchema.parse(run)
       );
+      setRuns(parsedRuns);
       setAuthenticated(
         Boolean((sessionResponse as { authenticated?: boolean }).authenticated)
       );
@@ -158,20 +161,29 @@ export function AdaptArxivDashboard() {
         (job) => jobSummarySchema.parse(job)
       );
       setJobs(parsedJobs);
-      const nextJobId =
-        selectedJobId && parsedJobs.some((job) => job.id === selectedJobId)
-          ? selectedJobId
-          : (parsedJobs[0]?.id ?? null);
-      setSelectedJobId(nextJobId);
-      if (nextJobId) {
-        await loadJobDetail(nextJobId);
+      const legacyProofRuns = getLegacyProofRuns(parsedRuns);
+      const nextScope =
+        selectedScope?.kind === "legacy-proof" && legacyProofRuns.length > 0
+          ? selectedScope
+          : selectedScope?.kind === "job" &&
+              parsedJobs.some((job) => job.id === selectedScope.jobId)
+            ? selectedScope
+            : parsedJobs[0]
+              ? ({ kind: "job", jobId: parsedJobs[0].id } satisfies RunScope)
+              : legacyProofRuns.length > 0
+                ? ({ kind: "legacy-proof" } satisfies RunScope)
+                : null;
+
+      setSelectedScope(nextScope);
+      if (nextScope?.kind === "job") {
+        await loadJobDetail(nextScope.jobId);
       } else {
         setJobDetail(null);
       }
     } catch (caught) {
       setError(errorMessage(caught));
     }
-  }, [loadJobDetail, selectedJobId]);
+  }, [loadJobDetail, selectedScope]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setMounted(true));
@@ -182,18 +194,27 @@ export function AdaptArxivDashboard() {
   }, [refreshAll, startTransition]);
 
   useEffect(() => {
-    if (!selectedJobId) {
+    if (selectedScope?.kind !== "job") {
       return;
     }
     const interval = window.setInterval(() => {
       void refreshAll();
     }, 5000);
     return () => window.clearInterval(interval);
-  }, [refreshAll, selectedJobId]);
+  }, [refreshAll, selectedScope]);
 
+  const selectedJobId =
+    selectedScope?.kind === "job" ? selectedScope.jobId : null;
+  const selectedLegacyProof = selectedScope?.kind === "legacy-proof";
+  const legacyProofRuns = useMemo(() => getLegacyProofRuns(runs), [runs]);
   const activeRuns = useMemo(
-    () => (selectedJobId ? (jobDetail?.runs ?? []) : runs),
-    [jobDetail?.runs, runs, selectedJobId]
+    () =>
+      selectedLegacyProof
+        ? legacyProofRuns
+        : selectedJobId
+          ? (jobDetail?.runs ?? [])
+          : runs,
+    [jobDetail?.runs, legacyProofRuns, runs, selectedJobId, selectedLegacyProof]
   );
   const comparable = useMemo(() => buildComparableBars(activeRuns), [activeRuns]);
   const latestAdapted = activeRuns.find(
@@ -237,7 +258,7 @@ export function AdaptArxivDashboard() {
       if (!response.jobId) {
         throw new Error("Job creation did not return an id");
       }
-      setSelectedJobId(response.jobId);
+      setSelectedScope({ kind: "job", jobId: response.jobId });
       await refreshAll();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -247,13 +268,19 @@ export function AdaptArxivDashboard() {
   }
 
   async function selectJob(jobId: string) {
-    setSelectedJobId(jobId);
+    setSelectedScope({ kind: "job", jobId });
     setError(null);
     try {
       await loadJobDetail(jobId);
     } catch (caught) {
       setError(errorMessage(caught));
     }
+  }
+
+  function selectLegacyProof() {
+    setSelectedScope({ kind: "legacy-proof" });
+    setJobDetail(null);
+    setError(null);
   }
 
   async function retryStage(stageKey: StageKey) {
@@ -308,6 +335,8 @@ export function AdaptArxivDashboard() {
         modalRunResultSchema.parse(run)
       );
       setRuns((current) => [...parsedRuns, ...current]);
+      setSelectedScope({ kind: "legacy-proof" });
+      setJobDetail(null);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -447,14 +476,28 @@ export function AdaptArxivDashboard() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-5">
-          <JobTimeline
-            jobDetail={jobDetail}
-            authenticated={authenticated}
-            busyAction={busyAction}
-            onRetry={(stageKey) => void retryStage(stageKey)}
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 md:px-8 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+        <aside className="grid content-start gap-5 lg:sticky lg:top-4">
+          <JobList
+            jobs={jobs}
+            legacyProofRuns={legacyProofRuns}
+            selectedScope={selectedScope}
+            onSelectJob={(jobId) => void selectJob(jobId)}
+            onSelectLegacyProof={selectLegacyProof}
           />
+        </aside>
+
+        <div className="grid min-w-0 gap-5">
+          {selectedLegacyProof ? (
+            <LegacyProofSummary runs={legacyProofRuns} />
+          ) : (
+            <JobTimeline
+              jobDetail={jobDetail}
+              authenticated={authenticated}
+              busyAction={busyAction}
+              onRetry={(stageKey) => void retryStage(stageKey)}
+            />
+          )}
 
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -464,9 +507,11 @@ export function AdaptArxivDashboard() {
                   Same-runner F1
                 </CardTitle>
                 <CardDescription>
-                  {selectedJobId
-                    ? "Scoped to the selected agent job. The Indonesian test set is never adapted."
-                    : "The Indonesian test set is never adapted. Only training data changes."}
+                  {selectedLegacyProof
+                    ? "Scoped to the saved 500-row proof run. The Indonesian test set is never adapted."
+                    : selectedJobId
+                      ? "Scoped to the selected agent job. The Indonesian test set is never adapted."
+                      : "The Indonesian test set is never adapted. Only training data changes."}
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -498,7 +543,7 @@ export function AdaptArxivDashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
+              <div className="h-80 min-w-0">
                 {mounted && comparable.bars.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
@@ -570,14 +615,20 @@ export function AdaptArxivDashboard() {
 
           <Tabs defaultValue="runs" className="w-full">
             <TabsList>
-              <TabsTrigger value="events">Job events</TabsTrigger>
+              <TabsTrigger value="events">
+                {selectedLegacyProof ? "Proof notes" : "Job events"}
+              </TabsTrigger>
               <TabsTrigger value="runs">Run history</TabsTrigger>
               <TabsTrigger value="validation">Validation</TabsTrigger>
               <TabsTrigger value="data">Data inspect</TabsTrigger>
               <TabsTrigger value="spec">Specification</TabsTrigger>
             </TabsList>
             <TabsContent value="events">
-              <JobEvents events={jobDetail?.events ?? []} />
+              {selectedLegacyProof ? (
+                <LegacyProofNotes runs={legacyProofRuns} />
+              ) : (
+                <JobEvents events={jobDetail?.events ?? []} />
+              )}
             </TabsContent>
             <TabsContent value="runs">
               <RunHistory runs={activeRuns} loading={isPending} />
@@ -600,12 +651,7 @@ export function AdaptArxivDashboard() {
           </Tabs>
         </div>
 
-        <aside className="grid content-start gap-5">
-          <JobList
-            jobs={jobs}
-            selectedJobId={selectedJobId}
-            onSelect={(jobId) => void selectJob(jobId)}
-          />
+        <aside className="grid content-start gap-5 lg:col-start-2 xl:col-start-auto">
           <ManifestPanel paper={paper} jobDetail={jobDetail} />
           <MetricPanel baseline={latestBaseline} adapted={latestAdapted} />
           <Card>
@@ -763,15 +809,99 @@ function JobEvents({ events }: { events: JobDetail["events"] }) {
   );
 }
 
+function LegacyProofSummary({ runs }: { runs: RunResult[] }) {
+  const comparable = buildComparableBars(runs);
+  const rawFull = runs.find((run) => run.trainingSource === "paper_raw_full");
+  const rawPaired = runs.find((run) => run.trainingSource === "paper_raw_paired");
+  const adapted = runs.find(
+    (run) => run.trainingSource === "adaption_adapted_only"
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <BadgeCheck className="size-5 text-primary" />
+            Saved 500-row proof
+          </CardTitle>
+          <CardDescription>
+            Earlier paper-faithful run without a Convex job id, shown here so
+            the demo always has a completed result to inspect.
+          </CardDescription>
+        </div>
+        <Badge>succeeded</Badge>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-3">
+        <Metric label="Raw full" value={rawFull?.metricValue} />
+        <Metric label="Paired raw" value={rawPaired?.metricValue} />
+        <Metric label="Adapted only" value={adapted?.metricValue} />
+        <div className="rounded-lg border border-white/10 bg-background/60 p-3 md:col-span-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Test set
+          </p>
+          <p className="mt-2 font-mono text-xs text-muted-foreground">
+            {comparable.testSetHash ?? "waiting for run"}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LegacyProofNotes({ runs }: { runs: RunResult[] }) {
+  const adapted = runs.find(
+    (run) => run.trainingSource === "adaption_adapted_only"
+  );
+  const rowsPassed = adapted?.validation?.rowsPassedValidation;
+  const datasetId = adapted?.adaption?.datasetId;
+
+  return (
+    <Card>
+      <CardContent className="grid gap-3 p-4 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+          <p className="font-medium text-foreground">Manual proof run</p>
+          <p className="mt-2">
+            These completed runs came from the earlier paper-faithful 500-row
+            proof path. They are intentionally separate from the newer agentic
+            job timeline.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{runs.length} persisted runs</Badge>
+          <Badge variant="outline">
+            passed rows: {rowsPassed ?? "waiting"}
+          </Badge>
+          {datasetId ? (
+            <Badge variant="outline" className="font-mono">
+              {datasetId.slice(0, 8)}
+            </Badge>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function JobList({
   jobs,
-  selectedJobId,
-  onSelect,
+  legacyProofRuns,
+  selectedScope,
+  onSelectJob,
+  onSelectLegacyProof,
 }: {
   jobs: JobSummary[];
-  selectedJobId: string | null;
-  onSelect: (jobId: string) => void;
+  legacyProofRuns: RunResult[];
+  selectedScope: RunScope | null;
+  onSelectJob: (jobId: string) => void;
+  onSelectLegacyProof: () => void;
 }) {
+  const proofComparable = buildComparableBars(legacyProofRuns);
+  const proofAdapted = proofComparable.bars.find(
+    (bar) => bar.trainingSource === "adaption_adapted_only"
+  );
+  const hasProof = legacyProofRuns.length > 0;
+
   return (
     <Card>
       <CardHeader>
@@ -779,19 +909,51 @@ function JobList({
           <Bot className="size-5 text-primary" />
           Jobs
         </CardTitle>
-        <CardDescription>Convex-backed paper reproduction attempts.</CardDescription>
+        <CardDescription>
+          Select a saved proof run or a Convex-backed agent job.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2">
-        {jobs.length === 0 ? (
+        {hasProof ? (
+          <button
+            type="button"
+            onClick={onSelectLegacyProof}
+            className={`rounded-lg border p-3 text-left text-sm transition ${
+              selectedScope?.kind === "legacy-proof"
+                ? "border-primary/60 bg-primary/10"
+                : "border-white/10 bg-background/60 hover:border-white/20"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium">500-row proof run</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Completed manual paper-faithful run
+                </p>
+              </div>
+              <Badge>succeeded</Badge>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">{legacyProofRuns.length} runs</Badge>
+              {proofAdapted ? (
+                <Badge variant="outline">
+                  adapted {formatMetric(proofAdapted.metricValue)}
+                </Badge>
+              ) : null}
+            </div>
+          </button>
+        ) : null}
+
+        {jobs.length === 0 && !hasProof ? (
           <p className="text-sm text-muted-foreground">No jobs created yet.</p>
         ) : (
           jobs.map((job) => (
             <button
               key={job.id}
               type="button"
-              onClick={() => onSelect(job.id)}
+              onClick={() => onSelectJob(job.id)}
               className={`rounded-lg border p-3 text-left text-sm transition ${
-                selectedJobId === job.id
+                selectedScope?.kind === "job" && selectedScope.jobId === job.id
                   ? "border-primary/60 bg-primary/10"
                   : "border-white/10 bg-background/60 hover:border-white/20"
               }`}
@@ -1513,6 +1675,15 @@ function SpecificationPanel() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function getLegacyProofRuns(runs: RunResult[]): RunResult[] {
+  return runs.filter(
+    (run) =>
+      !run.jobId &&
+      run.experiment?.experimentMode === "paper_faithful" &&
+      run.experiment.totalData === 500
   );
 }
 

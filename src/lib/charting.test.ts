@@ -87,4 +87,20 @@ describe("chart integrity", () => {
       "adaption_adapted_only",
     ]);
   });
+
+  it("keeps the newest run per source when history contains duplicates", () => {
+    const bars = buildComparableBars([
+      {
+        ...paperRun,
+        metricValue: 0.81,
+      },
+      {
+        ...paperRun,
+        metricValue: 0.62,
+      },
+    ]);
+
+    expect(bars.bars).toHaveLength(1);
+    expect(bars.bars[0]?.metricValue).toBe(0.81);
+  });
 });

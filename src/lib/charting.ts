@@ -51,7 +51,9 @@ export function buildComparableBars(runs: RunResult[]): ComparableBars {
 
   const latestBySource = new Map<TrainingSource, RunResult>();
   for (const run of accepted) {
-    latestBySource.set(run.trainingSource, run);
+    if (!latestBySource.has(run.trainingSource)) {
+      latestBySource.set(run.trainingSource, run);
+    }
   }
 
   const bars = Array.from(latestBySource.values())
