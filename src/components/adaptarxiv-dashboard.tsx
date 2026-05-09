@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   Activity,
   AlertTriangle,
   BadgeCheck,
+  Beaker,
+  Bot,
+  Clock,
+  Database,
+  ExternalLink,
   FileText,
   KeyRound,
   Loader2,
   Lock,
   Play,
   RefreshCw,
+  RotateCcw,
   Rows3,
+  Search,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -52,14 +58,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { buildComparableBars, formatMetric } from "@/lib/charting";
 import {
   datasetPreviewSchema,
+  jobDetailSchema,
+  jobSummarySchema,
   modalRunResultSchema,
   paperManifestSchema,
   type DatasetPreview,
+  type JobDetail,
+  type JobSummary,
   type PaperManifest,
   type RunResult,
+  type StageKey,
 } from "@/lib/contracts";
 import { ACTIVE_RECIPES, BLUEPRINT_INSTRUCTION } from "@/lib/paper";
-import { EASE } from "@/lib/motion";
 
 type Health = {
   ok: boolean;
@@ -95,10 +105,18 @@ const LEGACY_RUN_REQUEST = {
   model_seed: 4,
 };
 
+type RunScope =
+  | { kind: "job"; jobId: string }
+  | { kind: "legacy-proof" };
+
 export function AdaptArxivDashboard() {
   const [paper, setPaper] = useState<PaperManifest | null>(null);
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [selectedScope, setSelectedScope] = useState<RunScope | null>(null);
+  const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
+  const [arxivUrl, setArxivUrl] = useState("https://arxiv.org/abs/2009.05713");
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -108,51 +126,107 @@ export function AdaptArxivDashboard() {
   const [mounted, setMounted] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const loadJobDetail = useCallback(async (jobId: string) => {
+    const detail = jobDetailSchema.parse(await fetchJson(`/api/jobs/${jobId}`));
+    setJobDetail(detail);
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    setError(null);
+    try {
+      const [
+        paperResponse,
+        runsResponse,
+        sessionResponse,
+        healthResponse,
+        jobsResponse,
+      ] = await Promise.all([
+        fetchJson("/api/paper"),
+        fetchJson("/api/runs"),
+        fetchJson("/api/session"),
+        fetchJson("/api/health"),
+        fetchJson("/api/jobs"),
+      ]);
+
+      setPaper(paperManifestSchema.parse(paperResponse));
+      const parsedRuns = ((runsResponse as { runs?: unknown[] }).runs ?? []).map(
+        (run) => modalRunResultSchema.parse(run)
+      );
+      setRuns(parsedRuns);
+      setAuthenticated(
+        Boolean((sessionResponse as { authenticated?: boolean }).authenticated)
+      );
+      setHealth(healthResponse as Health);
+      const parsedJobs = ((jobsResponse as { jobs?: unknown[] }).jobs ?? []).map(
+        (job) => jobSummarySchema.parse(job)
+      );
+      setJobs(parsedJobs);
+      const legacyProofRuns = getLegacyProofRuns(parsedRuns);
+      const nextScope =
+        selectedScope?.kind === "legacy-proof" && legacyProofRuns.length > 0
+          ? selectedScope
+          : selectedScope?.kind === "job" &&
+              parsedJobs.some((job) => job.id === selectedScope.jobId)
+            ? selectedScope
+            : parsedJobs[0]
+              ? ({ kind: "job", jobId: parsedJobs[0].id } satisfies RunScope)
+              : legacyProofRuns.length > 0
+                ? ({ kind: "legacy-proof" } satisfies RunScope)
+                : null;
+
+      setSelectedScope(nextScope);
+      if (nextScope?.kind === "job") {
+        await loadJobDetail(nextScope.jobId);
+      } else {
+        setJobDetail(null);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, [loadJobDetail, selectedScope]);
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => setMounted(true));
     startTransition(() => {
       void refreshAll();
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [refreshAll, startTransition]);
 
-  const comparable = useMemo(() => buildComparableBars(runs), [runs]);
-  const latestAdapted = runs.find(
+  useEffect(() => {
+    if (selectedScope?.kind !== "job") {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      void refreshAll();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [refreshAll, selectedScope]);
+
+  const selectedJobId =
+    selectedScope?.kind === "job" ? selectedScope.jobId : null;
+  const selectedLegacyProof = selectedScope?.kind === "legacy-proof";
+  const legacyProofRuns = useMemo(() => getLegacyProofRuns(runs), [runs]);
+  const activeRuns = useMemo(
+    () =>
+      selectedLegacyProof
+        ? legacyProofRuns
+        : selectedJobId
+          ? (jobDetail?.runs ?? [])
+          : runs,
+    [jobDetail?.runs, legacyProofRuns, runs, selectedJobId, selectedLegacyProof]
+  );
+  const comparable = useMemo(() => buildComparableBars(activeRuns), [activeRuns]);
+  const latestAdapted = activeRuns.find(
     (run) =>
       run.trainingSource === "adaption_adapted_only" ||
       run.trainingSource === "adaption_id_aug"
   );
-  const latestBaseline = runs.find(
+  const latestBaseline = activeRuns.find(
     (run) =>
       run.trainingSource === "paper_raw_full" ||
       run.trainingSource === "indonesian_only"
   );
-
-  async function refreshAll() {
-    setError(null);
-    try {
-      const [paperResponse, runsResponse, sessionResponse, healthResponse] =
-        await Promise.all([
-          fetchJson("/api/paper"),
-          fetchJson("/api/runs"),
-          fetchJson("/api/session"),
-          fetchJson("/api/health"),
-        ]);
-
-      setPaper(paperManifestSchema.parse(paperResponse));
-      setRuns(
-        ((runsResponse as { runs?: unknown[] }).runs ?? []).map((run) =>
-          modalRunResultSchema.parse(run)
-        )
-      );
-      setAuthenticated(
-        Boolean((sessionResponse as { authenticated?: boolean }).authenticated)
-      );
-      setHealth(healthResponse as Health);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }
 
   async function signIn() {
     setBusyAction("session");
@@ -164,6 +238,63 @@ export function AdaptArxivDashboard() {
         body: JSON.stringify({ password }),
       });
       setPassword("");
+      await refreshAll();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function startJob() {
+    setBusyAction("job");
+    setError(null);
+    try {
+      const response = (await fetchJson("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ arxivUrl }),
+      })) as { jobId?: string };
+      if (!response.jobId) {
+        throw new Error("Job creation did not return an id");
+      }
+      setSelectedScope({ kind: "job", jobId: response.jobId });
+      await refreshAll();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function selectJob(jobId: string) {
+    setSelectedScope({ kind: "job", jobId });
+    setError(null);
+    try {
+      await loadJobDetail(jobId);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  function selectLegacyProof() {
+    setSelectedScope({ kind: "legacy-proof" });
+    setJobDetail(null);
+    setError(null);
+  }
+
+  async function retryStage(stageKey: StageKey) {
+    if (!selectedJobId) {
+      return;
+    }
+    setBusyAction(`retry-${stageKey}`);
+    setError(null);
+    try {
+      await fetchJson(`/api/jobs/${selectedJobId}/retry`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stageKey }),
+      });
       await refreshAll();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -204,6 +335,8 @@ export function AdaptArxivDashboard() {
         modalRunResultSchema.parse(run)
       );
       setRuns((current) => [...parsedRuns, ...current]);
+      setSelectedScope({ kind: "legacy-proof" });
+      setJobDetail(null);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -215,7 +348,8 @@ export function AdaptArxivDashboard() {
     setPreviewLoading(true);
     setError(null);
     try {
-      const datasetId = latestAdapted?.adaption?.datasetId;
+      const datasetId =
+        latestAdapted?.adaption?.datasetId ?? jobDetail?.adaptedDataset?.datasetId;
       const preview = datasetPreviewSchema.parse(
         await fetchJson("/api/dataset-preview", {
           method: "POST",
@@ -236,23 +370,58 @@ export function AdaptArxivDashboard() {
   }
 
   return (
-    <main className="flex-1 bg-dust">
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: EASE }}
-        className="border-b border-dark-grey/20 bg-base-foreground"
-      >
-        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-12 md:px-8 md:py-14">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <main className="min-h-screen bg-background">
+      <section className="border-b border-dark-grey bg-[radial-gradient(circle_at_top_left,rgba(232,217,168,0.08),transparent_38%),linear-gradient(180deg,rgba(196,195,182,0.04),transparent)]">
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-8 md:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <h1 className="c-heading-lg-s c-italic-no-uppercase text-foreground">
-                Replicate, <em className="c-italic-emphasis">adapt</em>, compare.
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="gap-1">
+                  <Beaker className="size-3.5" />
+                  Demo MVP
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="border-primary/40 text-primary"
+                >
+                  fixed test set
+                </Badge>
+              </div>
+              <h1 className="text-4xl font-semibold tracking-normal text-balance md:text-6xl">
+                AdaptArxiv
               </h1>
-              <p className="mt-5 max-w-2xl c-body text-light-grey">
-                Run the same model on adapted training data and compare results
-                on a held-out evaluation set.
+              <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
+                Drop in an arXiv paper, let the agent extract the reproducible
+                setup, then watch Adaption and Modal runs converge into one
+                comparable result.
               </p>
+              <form
+                className="mt-5 flex max-w-2xl flex-col gap-2 sm:flex-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void startJob();
+                }}
+              >
+                <Input
+                  type="url"
+                  value={arxivUrl}
+                  onChange={(event) => setArxivUrl(event.target.value)}
+                  placeholder="https://arxiv.org/abs/2009.05713"
+                  className="h-11"
+                />
+                <Button
+                  type="submit"
+                  disabled={!authenticated || busyAction !== null || !arxivUrl}
+                  className="h-11 gap-2 sm:w-44"
+                >
+                  {busyAction === "job" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Search className="size-4" />
+                  )}
+                  Start job
+                </Button>
+              </form>
             </div>
 
             <div className="grid gap-3 sm:min-w-96">
@@ -276,7 +445,7 @@ export function AdaptArxivDashboard() {
                 <Input
                   type="password"
                   autoComplete="current-password"
-                  placeholder="Password"
+                  placeholder="Demo admin password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="h-10"
@@ -305,24 +474,44 @@ export function AdaptArxivDashboard() {
             </Alert>
           ) : null}
         </div>
-      </motion.section>
+      </section>
 
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
-        className="mx-auto grid max-w-7xl gap-5 px-5 py-8 md:px-8 lg:grid-cols-[minmax(0,1fr)_360px]"
-      >
-        <div className="grid gap-5">
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 md:px-8 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+        <aside className="grid content-start gap-5 lg:sticky lg:top-4">
+          <JobList
+            jobs={jobs}
+            legacyProofRuns={legacyProofRuns}
+            selectedScope={selectedScope}
+            onSelectJob={(jobId) => void selectJob(jobId)}
+            onSelectLegacyProof={selectLegacyProof}
+          />
+        </aside>
+
+        <div className="grid min-w-0 gap-5">
+          {selectedLegacyProof ? (
+            <LegacyProofSummary runs={legacyProofRuns} />
+          ) : (
+            <JobTimeline
+              jobDetail={jobDetail}
+              authenticated={authenticated}
+              busyAction={busyAction}
+              onRetry={(stageKey) => void retryStage(stageKey)}
+            />
+          )}
+
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
-                  <Activity className="size-4 text-light-grey" />
-                  F1 comparison
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="size-5 text-primary" />
+                  Same-runner F1
                 </CardTitle>
-                <CardDescription className="c-body-sm text-light-grey">
-                  Same model, same evaluation set. Only training data changes.
+                <CardDescription>
+                  {selectedLegacyProof
+                    ? "Scoped to the saved 500-row proof run. The Indonesian test set is never adapted."
+                    : selectedJobId
+                      ? "Scoped to the selected agent job. The Indonesian test set is never adapted."
+                      : "The Indonesian test set is never adapted. Only training data changes."}
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -336,7 +525,7 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Play className="size-4" />
                   )}
-                  Run baseline
+                  Paper 500 proof
                 </Button>
                 <Button
                   variant="secondary"
@@ -349,12 +538,12 @@ export function AdaptArxivDashboard() {
                   ) : (
                     <Sparkles className="size-4" />
                   )}
-                  Run adapted
+                  Adapt ID
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
+              <div className="h-80 min-w-0">
                 {mounted && comparable.bars.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
@@ -363,13 +552,12 @@ export function AdaptArxivDashboard() {
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
-                        stroke="var(--ds-light-grey)"
-                        strokeOpacity={0.3}
+                        stroke="rgba(255,255,255,0.08)"
                       />
                       <XAxis
                         dataKey="label"
                         tick={{
-                          fill: "var(--ds-light-grey)",
+                          fill: "rgba(226,232,240,0.72)",
                           fontSize: 12,
                         }}
                         interval={0}
@@ -377,15 +565,12 @@ export function AdaptArxivDashboard() {
                       <YAxis
                         domain={[0, 1]}
                         tick={{
-                          fill: "var(--ds-light-grey)",
+                          fill: "rgba(226,232,240,0.72)",
                           fontSize: 12,
                         }}
                       />
                       <ChartTooltip
-                        cursor={{
-                          fill: "var(--ds-dark-grey)",
-                          fillOpacity: 0.06,
-                        }}
+                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
                         formatter={(value) => [
                           formatMetric(Number(value)),
                           "F1",
@@ -393,35 +578,35 @@ export function AdaptArxivDashboard() {
                       />
                       <ReferenceLine
                         y={paper?.reportedReferenceF1 ?? 0.79}
-                        stroke="var(--ds-aged-binding)"
+                        stroke="rgba(250,204,21,0.9)"
                         strokeDasharray="6 4"
                         label={{
-                          value: "Reference",
-                          fill: "var(--ds-aged-binding)",
+                          value: "paper-reported, different runner",
+                          fill: "rgba(250,204,21,0.9)",
                           fontSize: 12,
                           position: "insideTopRight",
                         }}
                       />
                       <Bar
                         dataKey="metricValue"
-                        fill="var(--ds-dark-grey)"
+                        fill="var(--chart-1)"
                         radius={[6, 6, 0, 0]}
                       />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-full items-center justify-center rounded-lg border border-dark-grey/15 bg-background c-body-sm text-light-grey">
-                    Awaiting first result
+                  <div className="flex h-full items-center justify-center rounded-lg border border-white/10 bg-background/50 text-sm text-muted-foreground">
+                    Waiting for a same-runner result
                   </div>
                 )}
               </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2 c-body-sm text-light-grey">
-                <Badge variant="outline" className="font-mono">
-                  evaluation set: {comparable.testSetHash ? comparable.testSetHash.slice(0, 12) : "—"}
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">
+                  hash: {comparable.testSetHash ?? "waiting for run"}
                 </Badge>
                 {comparable.rejected.length > 0 ? (
                   <Badge variant="destructive">
-                    {comparable.rejected.length} excluded run
+                    {comparable.rejected.length} mismatched run hidden
                   </Badge>
                 ) : null}
               </div>
@@ -429,34 +614,24 @@ export function AdaptArxivDashboard() {
           </Card>
 
           <Tabs defaultValue="runs" className="w-full">
-            <TabsList className="border-b border-dark-grey/20">
-              <TabsTrigger
-                value="runs"
-                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
-              >
-                Run history
+            <TabsList>
+              <TabsTrigger value="events">
+                {selectedLegacyProof ? "Proof notes" : "Job events"}
               </TabsTrigger>
-              <TabsTrigger
-                value="validation"
-                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
-              >
-                Validation
-              </TabsTrigger>
-              <TabsTrigger
-                value="data"
-                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
-              >
-                Data inspect
-              </TabsTrigger>
-              <TabsTrigger
-                value="spec"
-                className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
-              >
-                Adapter brief
-              </TabsTrigger>
+              <TabsTrigger value="runs">Run history</TabsTrigger>
+              <TabsTrigger value="validation">Validation</TabsTrigger>
+              <TabsTrigger value="data">Data inspect</TabsTrigger>
+              <TabsTrigger value="spec">Specification</TabsTrigger>
             </TabsList>
+            <TabsContent value="events">
+              {selectedLegacyProof ? (
+                <LegacyProofNotes runs={legacyProofRuns} />
+              ) : (
+                <JobEvents events={jobDetail?.events ?? []} />
+              )}
+            </TabsContent>
             <TabsContent value="runs">
-              <RunHistory runs={runs} loading={isPending} />
+              <RunHistory runs={activeRuns} loading={isPending} />
             </TabsContent>
             <TabsContent value="validation">
               <ValidationPanel run={latestAdapted} />
@@ -476,12 +651,332 @@ export function AdaptArxivDashboard() {
           </Tabs>
         </div>
 
-        <aside className="grid content-start gap-5">
-          <ManifestPanel paper={paper} />
+        <aside className="grid content-start gap-5 lg:col-start-2 xl:col-start-auto">
+          <ManifestPanel paper={paper} jobDetail={jobDetail} />
           <MetricPanel baseline={latestBaseline} adapted={latestAdapted} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="size-5 text-primary" />
+                Persistence
+              </CardTitle>
+              <CardDescription>
+                Convex stores manifests, run history, adapted dataset metadata,
+                and cached fallbacks.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Live runs are persisted as immutable rows. When Modal or
+                Adaption times out, the API returns the latest matching
+                completed run.
+              </p>
+              <Separator />
+              <p>
+                Vercel routes use the service-role key server-side only; client
+                code never reads Convex deployment secrets.
+              </p>
+            </CardContent>
+          </Card>
         </aside>
-      </motion.section>
+      </section>
     </main>
+  );
+}
+
+function JobTimeline({
+  jobDetail,
+  authenticated,
+  busyAction,
+  onRetry,
+}: {
+  jobDetail: JobDetail | null;
+  authenticated: boolean;
+  busyAction: string | null;
+  onRetry: (stageKey: StageKey) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="size-5 text-primary" />
+            Agent job
+          </CardTitle>
+          <CardDescription>
+            Cursor extracts the paper, Adaption prepares data, and Modal runs
+            raw and adapted experiments from Convex state.
+          </CardDescription>
+        </div>
+        {jobDetail ? (
+          <Badge variant={jobDetail.job.status === "failed" ? "destructive" : "default"}>
+            {jobDetail.job.status.replaceAll("_", " ")}
+          </Badge>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {!jobDetail ? (
+          <div className="rounded-lg border border-white/10 bg-background/50 p-6 text-sm text-muted-foreground">
+            Unlock the demo and start with an arXiv URL to create a tracked
+            Convex job.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-5">
+            {jobDetail.stages.map((stage) => (
+              <div
+                key={stage.stageKey}
+                className="rounded-lg border border-white/10 bg-background/60 p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">{stageLabel(stage.stageKey)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      attempt {stage.attempt}
+                    </p>
+                  </div>
+                  <Badge variant={stageStatusVariant(stage.status)}>
+                    {stage.status}
+                  </Badge>
+                </div>
+                {stage.error ? (
+                  <p className="mt-3 line-clamp-3 text-xs text-destructive">
+                    {stage.error}
+                  </p>
+                ) : null}
+                {stage.retryable ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-3 w-full gap-2"
+                    disabled={
+                      !authenticated || busyAction === `retry-${stage.stageKey}`
+                    }
+                    onClick={() => onRetry(stage.stageKey)}
+                  >
+                    {busyAction === `retry-${stage.stageKey}` ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="size-3.5" />
+                    )}
+                    Retry
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobEvents({ events }: { events: JobDetail["events"] }) {
+  return (
+    <Card>
+      <CardContent className="grid gap-3 p-4">
+        {events.length === 0 ? (
+          <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
+            No job events yet
+          </div>
+        ) : (
+          events.map((event) => (
+            <div
+              key={event.id}
+              className="flex gap-3 rounded-lg border border-white/10 bg-background/60 p-3 text-sm"
+            >
+              <Clock className="mt-0.5 size-4 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={event.level === "error" ? "destructive" : "outline"}>
+                    {event.level}
+                  </Badge>
+                  {event.stageKey ? (
+                    <span className="text-xs text-muted-foreground">
+                      {stageLabel(event.stageKey)}
+                    </span>
+                  ) : null}
+                  <span className="text-xs text-muted-foreground">
+                    {formatTimestamp(event.createdAt)}
+                  </span>
+                </div>
+                <p className="mt-2 text-muted-foreground">{event.message}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LegacyProofSummary({ runs }: { runs: RunResult[] }) {
+  const comparable = buildComparableBars(runs);
+  const rawFull = runs.find((run) => run.trainingSource === "paper_raw_full");
+  const rawPaired = runs.find((run) => run.trainingSource === "paper_raw_paired");
+  const adapted = runs.find(
+    (run) => run.trainingSource === "adaption_adapted_only"
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <BadgeCheck className="size-5 text-primary" />
+            Saved 500-row proof
+          </CardTitle>
+          <CardDescription>
+            Earlier paper-faithful run without a Convex job id, shown here so
+            the demo always has a completed result to inspect.
+          </CardDescription>
+        </div>
+        <Badge>succeeded</Badge>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-3">
+        <Metric label="Raw full" value={rawFull?.metricValue} />
+        <Metric label="Paired raw" value={rawPaired?.metricValue} />
+        <Metric label="Adapted only" value={adapted?.metricValue} />
+        <div className="rounded-lg border border-white/10 bg-background/60 p-3 md:col-span-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Test set
+          </p>
+          <p className="mt-2 font-mono text-xs text-muted-foreground">
+            {comparable.testSetHash ?? "waiting for run"}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LegacyProofNotes({ runs }: { runs: RunResult[] }) {
+  const adapted = runs.find(
+    (run) => run.trainingSource === "adaption_adapted_only"
+  );
+  const rowsPassed = adapted?.validation?.rowsPassedValidation;
+  const datasetId = adapted?.adaption?.datasetId;
+
+  return (
+    <Card>
+      <CardContent className="grid gap-3 p-4 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+          <p className="font-medium text-foreground">Manual proof run</p>
+          <p className="mt-2">
+            These completed runs came from the earlier paper-faithful 500-row
+            proof path. They are intentionally separate from the newer agentic
+            job timeline.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{runs.length} persisted runs</Badge>
+          <Badge variant="outline">
+            passed rows: {rowsPassed ?? "waiting"}
+          </Badge>
+          {datasetId ? (
+            <Badge variant="outline" className="font-mono">
+              {datasetId.slice(0, 8)}
+            </Badge>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobList({
+  jobs,
+  legacyProofRuns,
+  selectedScope,
+  onSelectJob,
+  onSelectLegacyProof,
+}: {
+  jobs: JobSummary[];
+  legacyProofRuns: RunResult[];
+  selectedScope: RunScope | null;
+  onSelectJob: (jobId: string) => void;
+  onSelectLegacyProof: () => void;
+}) {
+  const proofComparable = buildComparableBars(legacyProofRuns);
+  const proofAdapted = proofComparable.bars.find(
+    (bar) => bar.trainingSource === "adaption_adapted_only"
+  );
+  const hasProof = legacyProofRuns.length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bot className="size-5 text-primary" />
+          Jobs
+        </CardTitle>
+        <CardDescription>
+          Select a saved proof run or a Convex-backed agent job.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {hasProof ? (
+          <button
+            type="button"
+            onClick={onSelectLegacyProof}
+            className={`rounded-lg border p-3 text-left text-sm transition ${
+              selectedScope?.kind === "legacy-proof"
+                ? "border-primary/60 bg-primary/10"
+                : "border-white/10 bg-background/60 hover:border-white/20"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium">500-row proof run</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Completed manual paper-faithful run
+                </p>
+              </div>
+              <Badge>succeeded</Badge>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">{legacyProofRuns.length} runs</Badge>
+              {proofAdapted ? (
+                <Badge variant="outline">
+                  adapted {formatMetric(proofAdapted.metricValue)}
+                </Badge>
+              ) : null}
+            </div>
+          </button>
+        ) : null}
+
+        {jobs.length === 0 && !hasProof ? (
+          <p className="text-sm text-muted-foreground">No jobs created yet.</p>
+        ) : (
+          jobs.map((job) => (
+            <button
+              key={job.id}
+              type="button"
+              onClick={() => onSelectJob(job.id)}
+              className={`rounded-lg border p-3 text-left text-sm transition ${
+                selectedScope?.kind === "job" && selectedScope.jobId === job.id
+                  ? "border-primary/60 bg-primary/10"
+                  : "border-white/10 bg-background/60 hover:border-white/20"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {job.title ?? `arXiv:${job.arxivId}`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {job.currentStage ? stageLabel(job.currentStage) : "created"} -{" "}
+                    {formatTimestamp(job.createdAt)}
+                  </p>
+                </div>
+                <Badge variant={job.status === "failed" ? "destructive" : "outline"}>
+                  {job.status.replaceAll("_", " ")}
+                </Badge>
+              </div>
+            </button>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -493,58 +988,97 @@ function StatusStrip({
   authenticated: boolean;
 }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
+    <div className="grid gap-2 rounded-lg border border-white/10 bg-card/70 p-3 text-sm shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-light-grey">
-          <ShieldCheck className="size-4 text-light-grey" />
-          Status
+        <span className="flex items-center gap-2 text-muted-foreground">
+          <ShieldCheck className="size-4 text-primary" />
+          Environment
         </span>
         <Badge variant={health?.ok ? "default" : "secondary"}>
-          {health?.ok ? "Connected" : "Configuring"}
+          {health?.ok ? "ready" : "needs keys"}
         </Badge>
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-light-grey">
-          <Lock className="size-4 text-light-grey" />
-          Access
+        <span className="flex items-center gap-2 text-muted-foreground">
+          <Lock className="size-4 text-primary" />
+          Run access
         </span>
         <Badge variant={authenticated ? "default" : "outline"}>
-          {authenticated ? "Signed in" : "Signed out"}
+          {authenticated ? "unlocked" : "locked"}
         </Badge>
       </div>
+      {health?.missing?.length ? (
+        <p className="text-xs text-muted-foreground">
+          Missing: {health.missing.join(", ")}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function ManifestPanel({ paper }: { paper: PaperManifest | null }) {
+function ManifestPanel({
+  paper,
+  jobDetail,
+}: {
+  paper: PaperManifest | null;
+  jobDetail: JobDetail | null;
+}) {
+  const manifest = jobDetail?.manifest;
+  const title = manifest?.title ?? paper?.title ?? "Loading manifest";
+  const authors =
+    manifest?.authors?.length ? manifest.authors.join(", ") : paper?.authors.join(", ");
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
-          <FileText className="size-4 text-light-grey" />
-          Source paper
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="size-5 text-primary" />
+          Paper manifest
         </CardTitle>
+        <CardDescription>
+          {manifest ? "Extracted by the Cursor agent." : "Fallback demo manifest."}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 c-body-sm">
+      <CardContent className="space-y-4 text-sm">
         <div>
-          <p className="c-body font-medium text-foreground">
-            {paper?.title ?? "Loading"}
-          </p>
-          <p className="mt-1 text-light-grey">
-            {paper?.authors.join(", ") ??
-              "Ilham Firdausi Putra, Ayu Purwarianti"}
+          <p className="font-medium">{title}</p>
+          <p className="mt-1 text-muted-foreground">
+            {authors ?? "Ilham Firdausi Putra, Ayu Purwarianti"}
           </p>
         </div>
-        <div className="grid gap-2 text-light-grey">
-          <Badge variant="outline" className="c-link uppercase tracking-[0.18em] w-fit">
-            Reported result
+        <div className="grid gap-2 text-muted-foreground">
+          <Badge variant="outline" className="w-fit">
+            {manifest ? `${Math.round(manifest.confidence * 100)}% confidence` : "reported in paper"}
           </Badge>
           <p>
             Task:{" "}
-            {paper?.baselineTask ?? "Binary Indonesian sentiment classification"}
+            {manifest?.technique.task ??
+              paper?.baselineTask ??
+              "Binary Indonesian sentiment classification"}
           </p>
-          <p>Metric: {paper?.baselineMetric?.toUpperCase() ?? "F1"}</p>
-          <p>Reference: XLM-R best ~{paper?.reportedReferenceF1 ?? 0.79}</p>
+          <p>
+            Technique: {manifest?.technique.name ?? manifest?.technique.model ?? "XLM-R"}
+          </p>
+          <p>
+            Metric:{" "}
+            {manifest?.reportedBaseline.metricName.toUpperCase() ??
+              paper?.baselineMetric?.toUpperCase() ??
+              "F1"}
+          </p>
+          <p>
+            Reference: XLM-R best ~
+            {manifest?.reportedBaseline.metricValue ??
+              paper?.reportedReferenceF1 ??
+              0.79}
+          </p>
+          <a
+            href={manifest?.absUrl ?? "https://arxiv.org/abs/2009.05713"}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-1 text-primary"
+          >
+            arXiv source <ExternalLink className="size-3.5" />
+          </a>
         </div>
       </CardContent>
     </Card>
@@ -564,24 +1098,22 @@ function MetricPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
-          <BadgeCheck className="size-4 text-light-grey" />
+        <CardTitle className="flex items-center gap-2">
+          <BadgeCheck className="size-5 text-primary" />
           Current delta
         </CardTitle>
-        <CardDescription className="c-body-sm text-light-grey">
-          Adapted vs. baseline on the evaluation set.
-        </CardDescription>
+        <CardDescription>Same runner, same split, same fixed test set.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Baseline" value={baseline?.metricValue} />
           <Metric label="Adapted" value={adapted?.metricValue} />
         </div>
-        <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
-          <p className="c-small uppercase tracking-[0.18em] text-light-grey">
+        <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
             F1 delta
           </p>
-          <p className="mt-1 c-heading-sm font-heading text-foreground tabular-nums">
+          <p className="mt-1 text-3xl font-semibold">
             {delta === null ? "—" : `${delta >= 0 ? "+" : ""}${formatMetric(delta)}`}
           </p>
         </div>
@@ -600,11 +1132,11 @@ function Metric({
   format?: "metric" | "integer";
 }) {
   return (
-    <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
-      <p className="c-small uppercase tracking-[0.18em] text-light-grey">
+    <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p className="mt-1 c-heading-xs font-heading text-foreground tabular-nums">
+      <p className="mt-1 text-2xl font-semibold">
         {value === undefined
           ? "—"
           : format === "integer"
@@ -622,21 +1154,11 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
-                Source
-              </TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
-                F1
-              </TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
-                Provenance
-              </TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey">
-                Hash
-              </TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey text-right">
-                Duration
-              </TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>F1</TableHead>
+              <TableHead>Provenance</TableHead>
+              <TableHead>Hash</TableHead>
+              <TableHead className="text-right">Duration</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -644,7 +1166,7 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="h-24 text-center c-body-sm text-light-grey"
+                  className="h-24 text-center text-muted-foreground"
                 >
                   {loading ? "Loading runs" : "No completed runs yet"}
                 </TableCell>
@@ -652,21 +1174,19 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
             ) : (
               runs.map((run, index) => (
                 <TableRow key={`${run.trainingSource}-${run.testSetHash}-${index}`}>
-                  <TableCell className="c-body-sm font-medium text-foreground">
+                  <TableCell className="font-medium">
                     {runLabel(run.trainingSource)}
                   </TableCell>
-                  <TableCell className="c-body-sm tabular-nums text-foreground">
-                    {formatMetric(run.metricValue)}
-                  </TableCell>
+                  <TableCell>{formatMetric(run.metricValue)}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                    <Badge variant="outline">
                       {run.provenance.replaceAll("_", " ")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-light-grey">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {run.testSetHash.slice(0, 12)}
                   </TableCell>
-                  <TableCell className="text-right c-body-sm tabular-nums text-foreground">
+                  <TableCell className="text-right">
                     {(run.durationMs / 1000).toFixed(1)}s
                   </TableCell>
                 </TableRow>
@@ -681,13 +1201,48 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
 
 function runLabel(source: RunResult["trainingSource"]): string {
   const labels: Record<RunResult["trainingSource"], string> = {
-    indonesian_only: "Baseline (original)",
-    adaption_id_aug: "Adapted (augmented)",
-    paper_raw_full: "Baseline (full)",
-    paper_raw_paired: "Baseline (paired)",
-    adaption_adapted_only: "Adapted (cleaned)",
+    indonesian_only: "Legacy Indonesian only",
+    adaption_id_aug: "Legacy Adaption-adapted Indonesian",
+    paper_raw_full: "Paper raw full",
+    paper_raw_paired: "Paired raw",
+    adaption_adapted_only: "Adaption adapted-only",
   };
   return labels[source];
+}
+
+function stageLabel(stage: StageKey): string {
+  const labels: Record<StageKey, string> = {
+    paper_extract: "Paper extraction",
+    adaption_run: "Adaption data",
+    baseline_run: "Raw baseline",
+    adapted_run: "Adapted run",
+    finalize: "Final result",
+  };
+  return labels[stage];
+}
+
+function stageStatusVariant(
+  status: JobDetail["stages"][number]["status"]
+): "default" | "secondary" | "outline" | "destructive" {
+  if (status === "succeeded") {
+    return "default";
+  }
+  if (status === "failed") {
+    return "destructive";
+  }
+  if (status === "running") {
+    return "secondary";
+  }
+  return "outline";
+}
+
+function formatTimestamp(value: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
 }
 
 function ValidationPanel({ run }: { run?: RunResult }) {
@@ -698,11 +1253,10 @@ function ValidationPanel({ run }: { run?: RunResult }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground">
-          Data validation
-        </CardTitle>
-        <CardDescription className="c-body-sm text-light-grey">
-          Rows are checked for schema, language, duplicates, and leakage.
+        <CardTitle>Data validation</CardTitle>
+        <CardDescription>
+          Rows are checked for schema, label, Indonesian language, duplicates,
+          and test leakage.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5 lg:grid-cols-3">
@@ -724,19 +1278,19 @@ function ValidationPanel({ run }: { run?: RunResult }) {
           />
         </div>
         <div className="grid gap-3">
-          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
-            <p className="c-small uppercase tracking-[0.18em] text-light-grey">
-              Improvement
+          <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Adaption evaluator
             </p>
-            <p className="mt-1 c-heading-xs font-heading text-foreground tabular-nums">
+            <p className="mt-1 text-2xl font-semibold">
               {adaption?.improvementPercent === undefined
                 ? "—"
                 : `${adaption.improvementPercent.toFixed(1)}%`}
             </p>
           </div>
-          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
-            <p className="c-small uppercase tracking-[0.18em] text-light-grey">Drops</p>
-            <p className="mt-2 text-light-grey">
+          <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
+            <p className="font-medium">Drops</p>
+            <p className="mt-2 text-muted-foreground">
               {validation?.drops
                 ? Object.entries(validation.drops)
                     .map(([key, value]) => `${key}: ${value}`)
@@ -746,43 +1300,41 @@ function ValidationPanel({ run }: { run?: RunResult }) {
           </div>
         </div>
         <div className="grid gap-3">
-          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3">
-            <p className="c-small uppercase tracking-[0.18em] text-light-grey">
-              Row accounting
+          <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Adaption accounting
             </p>
-            <p className="mt-2 c-body-sm text-light-grey">
+            <p className="mt-2 text-sm text-muted-foreground">
               Uploaded{" "}
-              <span className="text-foreground tabular-nums">{audit?.uploadedRows ?? "—"}</span>
+              <span className="text-foreground">{audit?.uploadedRows ?? "—"}</span>
               , ingested{" "}
-              <span className="text-foreground tabular-nums">{audit?.ingestedRows ?? "—"}</span>
+              <span className="text-foreground">{audit?.ingestedRows ?? "—"}</span>
               , processed{" "}
-              <span className="text-foreground tabular-nums">{audit?.processedRows ?? "—"}</span>
+              <span className="text-foreground">{audit?.processedRows ?? "—"}</span>
               , downloaded{" "}
-              <span className="text-foreground tabular-nums">{audit?.downloadedRows ?? "—"}</span>
+              <span className="text-foreground">{audit?.downloadedRows ?? "—"}</span>
               .
             </p>
           </div>
-          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
-            <p className="c-small uppercase tracking-[0.18em] text-light-grey">
-              Parser audit
-            </p>
+          <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
+            <p className="font-medium">Parser audit</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+              <Badge variant="outline">
                 fallback: {audit?.parserFallbackCount ?? "—"}
               </Badge>
-              <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+              <Badge variant="outline">
                 label mismatch: {audit?.labelMismatchCount ?? "—"}
               </Badge>
-              <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+              <Badge variant="outline">
                 raw matches: {audit?.exactRawMatchCount ?? "—"}
               </Badge>
             </div>
-            <p className="mt-2 text-light-grey">
+            <p className="mt-2 text-muted-foreground">
               {audit
                 ? `Shapes: ${formatCounts(audit.outputShapeCounts) || "none"}`
                 : "Waiting for audit"}
             </p>
-            <p className="mt-1 text-light-grey">
+            <p className="mt-1 text-muted-foreground">
               {audit
                 ? `Parse: ${formatCounts(audit.parseStatusCounts) || "none"}`
                 : ""}
@@ -813,12 +1365,13 @@ function DataInspectionPanel({
     <Card>
       <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground flex items-center gap-2">
-            <Rows3 className="size-4 text-light-grey" />
+          <CardTitle className="flex items-center gap-2">
+            <Rows3 className="size-5 text-primary" />
             Data inspect
           </CardTitle>
-          <CardDescription className="c-body-sm text-light-grey">
-            Compare original training rows with rows that passed validation.
+          <CardDescription>
+            Compare the sampled raw training rows with rows that survived the
+            Adaption validation gate.
           </CardDescription>
         </div>
         <Button
@@ -839,9 +1392,10 @@ function DataInspectionPanel({
         {!authenticated ? (
           <Alert>
             <Lock className="size-4" />
-            <AlertTitle>Sign in required</AlertTitle>
+            <AlertTitle>Unlock required</AlertTitle>
             <AlertDescription>
-              Sign in to load training samples.
+              Dataset previews use the Modal runner and are gated behind the
+              demo admin password.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -865,29 +1419,29 @@ function DataInspectionPanel({
                 format="integer"
               />
               <Metric
-                label="Adapter returned"
+                label="Adaption returned"
                 value={preview.adapted?.rowsReturned}
                 format="integer"
               />
             </div>
 
-            <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-3 c-body-sm">
-              <div className="grid gap-2 md:grid-cols-2 text-light-grey">
-                <p>
+            <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
+              <div className="grid gap-2 md:grid-cols-2">
+                <p className="text-muted-foreground">
                   Baseline trains on{" "}
                   <span className="text-foreground">
                     {setup?.baselineTrainText}
                   </span>
                   .
                 </p>
-                <p>
-                  Adapted trains on{" "}
+                <p className="text-muted-foreground">
+                  Adaption trains on{" "}
                   <span className="text-foreground">
                     {setup?.adaptedTrainText}
                   </span>
                   .
                 </p>
-                <p>
+                <p className="text-muted-foreground">
                   Head:{" "}
                   <span className="text-foreground">
                     {setup?.classifier}, budget {setup?.classifierMaxIter},
@@ -895,7 +1449,7 @@ function DataInspectionPanel({
                   </span>
                   .
                 </p>
-                <p>
+                <p className="text-muted-foreground">
                   Early stopping:{" "}
                   <span className="text-foreground">
                     {setup?.earlyStopping
@@ -912,7 +1466,7 @@ function DataInspectionPanel({
                   </span>
                   .
                 </p>
-                <p>
+                <p className="text-muted-foreground">
                   Loss and optimizer:{" "}
                   <span className="text-foreground">
                     {[setup?.loss, setup?.optimizer, setup?.scheduler]
@@ -921,40 +1475,38 @@ function DataInspectionPanel({
                   </span>
                   .
                 </p>
-                <p>
+                <p className="text-muted-foreground">
                   Decision threshold:{" "}
-                  <span className="text-foreground tabular-nums">
+                  <span className="text-foreground">
                     {setup?.threshold ?? 0.5}
                   </span>
                   .
                 </p>
               </div>
-              <Separator className="my-3 bg-dark-grey/20" />
+              <Separator className="my-3" />
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className="c-link uppercase tracking-[0.16em] font-mono">
-                  hash: {preview.testSet.hash.slice(0, 16)}
-                </Badge>
-                <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                <Badge variant="outline">hash: {preview.testSet.hash.slice(0, 16)}</Badge>
+                <Badge variant="outline">
                   raw labels: {formatCounts(preview.raw.labelCounts)}
                 </Badge>
                 {preview.adapted ? (
-                  <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                  <Badge variant="outline">
                     drops: {formatCounts(preview.adapted.drops) || "none"}
                   </Badge>
                 ) : (
-                  <Badge variant="secondary" className="c-link uppercase tracking-[0.16em]">
-                    No adapted dataset selected
+                  <Badge variant="secondary">
+                    no Adaption dataset selected
                   </Badge>
                 )}
                 {preview.adapted?.audit ? (
                   <>
-                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                    <Badge variant="outline">
                       fallback: {preview.adapted.audit.parserFallbackCount}
                     </Badge>
-                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                    <Badge variant="outline">
                       label mismatch: {preview.adapted.audit.labelMismatchCount}
                     </Badge>
-                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                    <Badge variant="outline">
                       shapes: {formatCounts(preview.adapted.audit.outputShapeCounts)}
                     </Badge>
                   </>
@@ -963,19 +1515,9 @@ function DataInspectionPanel({
             </div>
 
             <Tabs defaultValue="raw" className="w-full">
-              <TabsList className="border-b border-dark-grey/20">
-                <TabsTrigger
-                  value="raw"
-                  className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
-                >
-                  Raw train
-                </TabsTrigger>
-                <TabsTrigger
-                  value="adapted"
-                  className="c-link uppercase tracking-[0.18em] data-[state=active]:text-foreground"
-                >
-                  Adapted output
-                </TabsTrigger>
+              <TabsList>
+                <TabsTrigger value="raw">Raw train</TabsTrigger>
+                <TabsTrigger value="adapted">Adaption output</TabsTrigger>
               </TabsList>
               <TabsContent value="raw">
                 <PreviewTable mode="raw" rows={preview.raw.rows} />
@@ -984,18 +1526,19 @@ function DataInspectionPanel({
                 {preview.adapted ? (
                   <PreviewTable mode="adapted" rows={preview.adapted.rows} />
                 ) : (
-                  <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-8 text-center c-body-sm text-light-grey">
-                    Run an adapted experiment to inspect rows.
+                  <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
+                    Run or load an Adaption result before inspecting adapted
+                    rows.
                   </div>
                 )}
               </TabsContent>
             </Tabs>
           </>
         ) : (
-          <div className="rounded-lg border border-dark-grey/15 bg-base-foreground p-8 text-center c-body-sm text-light-grey">
+          <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
             {adaptedRun?.adaption?.datasetId
-              ? "Load samples to compare original and adapted rows."
-              : "Run the baseline first, then load samples for comparison."}
+              ? "Load samples to compare raw and Adaption-passed rows."
+              : "Run Paper 500 proof first, then load samples for the paired inspection."}
           </div>
         )}
       </CardContent>
@@ -1011,26 +1554,26 @@ function PreviewTable({
   rows: DatasetPreview["raw"]["rows"];
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-dark-grey/15">
+    <div className="overflow-x-auto rounded-lg border border-white/10">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey w-16">#</TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-40">Source ID</TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey w-28">Label</TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">Raw original</TableHead>
-              <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">Paper-preprocessed raw</TableHead>
+              <TableHead className="w-16">#</TableHead>
+              <TableHead className="min-w-40">Source ID</TableHead>
+              <TableHead className="w-28">Label</TableHead>
+              <TableHead className="min-w-80">Raw original</TableHead>
+              <TableHead className="min-w-80">Paper-preprocessed raw</TableHead>
               {mode === "adapted" ? (
                 <>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">Adapted raw output</TableHead>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-80">
+                  <TableHead className="min-w-80">Adaption raw output</TableHead>
+                  <TableHead className="min-w-80">
                     Paper-preprocessed adapted
                   </TableHead>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-32">Output</TableHead>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-36">Parse</TableHead>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-32">Generated label</TableHead>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey w-28">Status</TableHead>
-                  <TableHead className="c-link uppercase tracking-[0.18em] text-light-grey min-w-40">Drop reason</TableHead>
+                  <TableHead className="min-w-32">Output</TableHead>
+                  <TableHead className="min-w-36">Parse</TableHead>
+                  <TableHead className="min-w-32">Generated label</TableHead>
+                  <TableHead className="w-28">Status</TableHead>
+                  <TableHead className="min-w-40">Drop reason</TableHead>
                 </>
               ) : null}
             </TableRow>
@@ -1040,7 +1583,7 @@ function PreviewTable({
               <TableRow>
                 <TableCell
                   colSpan={mode === "adapted" ? 12 : 5}
-                  className="h-24 text-center c-body-sm text-light-grey"
+                  className="h-24 text-center text-muted-foreground"
                 >
                   No preview rows available
                 </TableCell>
@@ -1048,52 +1591,51 @@ function PreviewTable({
             ) : (
               rows.map((row) => (
                 <TableRow key={`${mode}-${row.rowIndex}`}>
-                  <TableCell className="font-mono text-xs text-light-grey tabular-nums">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {row.rowIndex}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-light-grey">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {row.sourceId || "-"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">{row.label}</Badge>
+                    <Badge variant="outline">{row.label}</Badge>
                   </TableCell>
-                  <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-light-grey">
+                  <TableCell className="max-w-md whitespace-normal text-sm leading-6 text-muted-foreground">
                     {row.originalText || row.text || "-"}
                   </TableCell>
-                  <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-foreground">
+                  <TableCell className="max-w-md whitespace-normal text-sm leading-6">
                     {row.preprocessedOriginalText || row.text || "-"}
                   </TableCell>
                   {mode === "adapted" ? (
                     <>
-                      <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-light-grey">
+                      <TableCell className="max-w-md whitespace-normal text-sm leading-6 text-muted-foreground">
                         {row.adaptedTextRaw || row.adaptedText || "-"}
                       </TableCell>
-                      <TableCell className="max-w-md whitespace-normal c-body-sm leading-6 text-foreground">
+                      <TableCell className="max-w-md whitespace-normal text-sm leading-6">
                         {row.preprocessedAdaptedText ||
                           row.adaptedText ||
                           row.adaptedTextRaw ||
                           "-"}
                       </TableCell>
-                      <TableCell className="c-body-sm text-light-grey">
+                      <TableCell className="text-sm text-muted-foreground">
                         {row.outputShape || "-"}
                       </TableCell>
-                      <TableCell className="c-body-sm text-light-grey">
+                      <TableCell className="text-sm text-muted-foreground">
                         {row.parseStatus || "-"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="c-link uppercase tracking-[0.16em]">
+                        <Badge variant="outline">
                           {row.generatedLabel || "-"}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant={row.status === "passed" ? "default" : "outline"}
-                          className="c-link uppercase tracking-[0.16em]"
                         >
                           {row.status || "unknown"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="c-body-sm text-light-grey">
+                      <TableCell className="text-sm text-muted-foreground">
                         {row.dropReason || "-"}
                       </TableCell>
                     </>
@@ -1117,32 +1659,31 @@ function SpecificationPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="c-heading-xs font-heading uppercase tracking-[0.12em] text-foreground">
-          Adapter brief
-        </CardTitle>
-        <CardDescription className="c-body-sm text-light-grey">
-          Instructions used by the adapter to refine training rows.
+        <CardTitle>Blueprint specification</CardTitle>
+        <CardDescription>
+          Sent to Adaption for Indonesian-only prompt rephrase and deduplication.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <Textarea
-          value={BLUEPRINT_INSTRUCTION}
-          readOnly
-          className="min-h-28 c-body-sm font-mono text-foreground"
-        />
+        <Textarea value={BLUEPRINT_INSTRUCTION} readOnly className="min-h-28" />
         <div className="flex flex-wrap gap-2">
           {Object.entries(ACTIVE_RECIPES).map(([recipe, enabled]) => (
-            <Badge
-              key={recipe}
-              variant={enabled ? "default" : "outline"}
-              className="c-link uppercase tracking-[0.16em]"
-            >
+            <Badge key={recipe} variant={enabled ? "default" : "outline"}>
               {recipe.replaceAll("_", " ")}: {enabled ? "on" : "off"}
             </Badge>
           ))}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function getLegacyProofRuns(runs: RunResult[]): RunResult[] {
+  return runs.filter(
+    (run) =>
+      !run.jobId &&
+      run.experiment?.experimentMode === "paper_faithful" &&
+      run.experiment.totalData === 500
   );
 }
 

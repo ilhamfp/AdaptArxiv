@@ -9,6 +9,8 @@
  */
 
 import type * as adaptarxiv from "../adaptarxiv.js";
+import type * as jobActions from "../jobActions.js";
+import type * as jobs from "../jobs.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +20,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   adaptarxiv: typeof adaptarxiv;
+  jobActions: typeof jobActions;
+  jobs: typeof jobs;
 }>;
 
 /**

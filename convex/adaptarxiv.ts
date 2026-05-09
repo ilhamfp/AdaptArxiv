@@ -125,6 +125,7 @@ const experimentMetadata = v.object({
 });
 
 const runInput = {
+  jobId: v.optional(v.id("jobs")),
   runnerConfig: runRequest,
   trainingSource,
   metricName: v.literal("f1"),
@@ -161,6 +162,7 @@ export const persistRun = mutation({
     const paperId = await ensurePaper(ctx);
     await ctx.db.insert("runs", {
       paperId,
+      jobId: args.jobId,
       runnerConfig: args.runnerConfig,
       trainingSource: args.trainingSource,
       metricName: args.metricName,

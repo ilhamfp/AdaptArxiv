@@ -14,6 +14,32 @@ const provenance = v.union(
   v.literal("cached_completed_run")
 );
 
+const stageKey = v.union(
+  v.literal("paper_extract"),
+  v.literal("adaption_run"),
+  v.literal("baseline_run"),
+  v.literal("adapted_run"),
+  v.literal("finalize")
+);
+
+const stageStatus = v.union(
+  v.literal("pending"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("blocked"),
+  v.literal("skipped")
+);
+
+const jobStatus = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("blocked"),
+  v.literal("partial_failed")
+);
+
 const runRequest = v.object({
   arxiv_id: v.string(),
   model: v.string(),
@@ -103,6 +129,68 @@ const experimentMetadata = v.object({
 });
 
 export default defineSchema({
+  jobs: defineTable({
+    arxivId: v.string(),
+    arxivUrl: v.string(),
+    absUrl: v.string(),
+    pdfUrl: v.string(),
+    title: v.optional(v.string()),
+    authors: v.optional(v.array(v.string())),
+    manifest: v.optional(v.any()),
+    status: jobStatus,
+    currentStage: v.optional(stageKey),
+    supportKey: v.string(),
+    supported: v.boolean(),
+    cursorAgentId: v.optional(v.string()),
+    cursorRunId: v.optional(v.string()),
+    latestError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_created", ["createdAt"])
+    .index("by_arxiv_created", ["arxivId", "createdAt"]),
+
+  jobStages: defineTable({
+    jobId: v.id("jobs"),
+    stageKey,
+    status: stageStatus,
+    attempt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    retryable: v.optional(v.boolean()),
+    output: v.optional(v.any()),
+    updatedAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_job_stage", ["jobId", "stageKey"]),
+
+  jobEvents: defineTable({
+    jobId: v.id("jobs"),
+    stageKey: v.optional(stageKey),
+    level: v.union(v.literal("info"), v.literal("warn"), v.literal("error")),
+    message: v.string(),
+    payload: v.optional(v.any()),
+    createdAt: v.number(),
+  }).index("by_job_created", ["jobId", "createdAt"]),
+
+  adaptedDatasets: defineTable({
+    jobId: v.id("jobs"),
+    datasetId: v.string(),
+    status: v.string(),
+    rowCount: v.optional(v.union(v.number(), v.null())),
+    rowsReturned: v.number(),
+    rowsPassedValidation: v.number(),
+    drops: v.record(v.string(), v.number()),
+    audit: v.optional(adaptionAudit),
+    adaption: v.optional(adaptionSummary),
+    previewRows: v.optional(v.array(v.any())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_dataset", ["datasetId"]),
+
   papers: defineTable({
     arxivId: v.string(),
     title: v.string(),
@@ -112,6 +200,7 @@ export default defineSchema({
   }).index("by_arxiv_id", ["arxivId"]),
 
   runs: defineTable({
+    jobId: v.optional(v.id("jobs")),
     paperId: v.id("papers"),
     runnerConfig: runRequest,
     trainingSource,
@@ -128,5 +217,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_paper_created", ["paperId", "createdAt"])
-    .index("by_paper_source_created", ["paperId", "trainingSource", "createdAt"]),
+    .index("by_paper_source_created", ["paperId", "trainingSource", "createdAt"])
+    .index("by_job_created", ["jobId", "createdAt"])
+    .index("by_job_source_created", ["jobId", "trainingSource", "createdAt"]),
 });
