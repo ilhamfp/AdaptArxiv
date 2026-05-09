@@ -17,11 +17,17 @@ export type ComparableBars = {
 const RUN_LABELS: Record<TrainingSource, string> = {
   indonesian_only: "Indonesian only",
   adaption_id_aug: "Adaption-adapted Indonesian",
+  paper_raw_full: "Paper raw full",
+  paper_raw_paired: "Paired raw",
+  adaption_adapted_only: "Adaption adapted-only",
 };
 
 const RUN_ORDER: Record<TrainingSource, number> = {
   indonesian_only: 0,
   adaption_id_aug: 1,
+  paper_raw_full: 0,
+  paper_raw_paired: 1,
+  adaption_adapted_only: 2,
 };
 
 export function buildComparableBars(runs: RunResult[]): ComparableBars {
@@ -29,9 +35,19 @@ export function buildComparableBars(runs: RunResult[]): ComparableBars {
     return { testSetHash: null, bars: [], rejected: [] };
   }
 
-  const testSetHash = runs[0].testSetHash;
-  const accepted = runs.filter((run) => run.testSetHash === testSetHash);
-  const rejected = runs.filter((run) => run.testSetHash !== testSetHash);
+  const scopedRuns = runs.some(
+    (run) => run.experiment?.experimentMode === "paper_faithful"
+  )
+    ? runs.filter((run) => run.experiment?.experimentMode === "paper_faithful")
+    : runs;
+
+  const testSetHash = scopedRuns[0]?.testSetHash ?? null;
+  if (!testSetHash) {
+    return { testSetHash: null, bars: [], rejected: [] };
+  }
+
+  const accepted = scopedRuns.filter((run) => run.testSetHash === testSetHash);
+  const rejected = scopedRuns.filter((run) => run.testSetHash !== testSetHash);
 
   const latestBySource = new Map<TrainingSource, RunResult>();
   for (const run of accepted) {

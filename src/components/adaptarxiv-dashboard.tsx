@@ -12,6 +12,8 @@ import {
   Loader2,
   Lock,
   Play,
+  RefreshCw,
+  Rows3,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -50,8 +52,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { buildComparableBars, formatMetric } from "@/lib/charting";
 import {
+  datasetPreviewSchema,
   modalRunResultSchema,
   paperManifestSchema,
+  type DatasetPreview,
   type PaperManifest,
   type RunResult,
 } from "@/lib/contracts";
@@ -65,10 +69,30 @@ type Health = {
 
 const RUN_REQUEST = {
   arxiv_id: "2009.05713",
+  model: "xlmr.large",
+  split_seed: 1,
+  n_train: 500,
+  max_rows: 500,
+  experiment_mode: "paper_faithful",
+  experiment_type: "A",
+  total_data: 500,
+  valid_size: 0.1,
+  data_seed: 1,
+  model_seed: 4,
+};
+
+const LEGACY_RUN_REQUEST = {
+  arxiv_id: "2009.05713",
   model: "xlm-roberta-base",
   split_seed: 1,
   n_train: 500,
   max_rows: 500,
+  experiment_mode: "legacy_demo",
+  experiment_type: "A",
+  total_data: 500,
+  valid_size: 0.1,
+  data_seed: 1,
+  model_seed: 4,
 };
 
 export function AdaptArxivDashboard() {
@@ -79,6 +103,8 @@ export function AdaptArxivDashboard() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [dataPreview, setDataPreview] = useState<DatasetPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -92,10 +118,14 @@ export function AdaptArxivDashboard() {
 
   const comparable = useMemo(() => buildComparableBars(runs), [runs]);
   const latestAdapted = runs.find(
-    (run) => run.trainingSource === "adaption_id_aug"
+    (run) =>
+      run.trainingSource === "adaption_adapted_only" ||
+      run.trainingSource === "adaption_id_aug"
   );
   const latestBaseline = runs.find(
-    (run) => run.trainingSource === "indonesian_only"
+    (run) =>
+      run.trainingSource === "paper_raw_full" ||
+      run.trainingSource === "indonesian_only"
   );
 
   async function refreshAll() {
@@ -150,7 +180,7 @@ export function AdaptArxivDashboard() {
         await fetchJson(`/api/runs/${endpoint}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(RUN_REQUEST),
+          body: JSON.stringify(LEGACY_RUN_REQUEST),
         })
       );
       setRuns((current) => [result, ...current]);
@@ -158,6 +188,50 @@ export function AdaptArxivDashboard() {
       setError(errorMessage(caught));
     } finally {
       setBusyAction(null);
+    }
+  }
+
+  async function runPaperProof() {
+    setBusyAction("paper-proof");
+    setError(null);
+    try {
+      const response = (await fetchJson("/api/runs/paper-proof", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(RUN_REQUEST),
+      })) as { runs?: unknown[] };
+      const parsedRuns = (response.runs ?? []).map((run) =>
+        modalRunResultSchema.parse(run)
+      );
+      setRuns((current) => [...parsedRuns, ...current]);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function loadDataPreview() {
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      const datasetId = latestAdapted?.adaption?.datasetId;
+      const preview = datasetPreviewSchema.parse(
+        await fetchJson("/api/dataset-preview", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...RUN_REQUEST,
+            limit: 24,
+            ...(datasetId ? { adaption_dataset_id: datasetId } : {}),
+          }),
+        })
+      );
+      setDataPreview(preview);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -256,19 +330,19 @@ export function AdaptArxivDashboard() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  variant="secondary"
                   className="gap-2"
                   disabled={!authenticated || busyAction !== null}
-                  onClick={() => void runAction("baseline")}
+                  onClick={() => void runPaperProof()}
                 >
-                  {busyAction === "baseline" ? (
+                  {busyAction === "paper-proof" ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <Play className="size-4" />
                   )}
-                  Baseline
+                  Paper 500 proof
                 </Button>
                 <Button
+                  variant="secondary"
                   className="gap-2"
                   disabled={!authenticated || busyAction !== null}
                   onClick={() => void runAction("adapt-id")}
@@ -357,6 +431,7 @@ export function AdaptArxivDashboard() {
             <TabsList>
               <TabsTrigger value="runs">Run history</TabsTrigger>
               <TabsTrigger value="validation">Validation</TabsTrigger>
+              <TabsTrigger value="data">Data inspect</TabsTrigger>
               <TabsTrigger value="spec">Specification</TabsTrigger>
             </TabsList>
             <TabsContent value="runs">
@@ -364,6 +439,15 @@ export function AdaptArxivDashboard() {
             </TabsContent>
             <TabsContent value="validation">
               <ValidationPanel run={latestAdapted} />
+            </TabsContent>
+            <TabsContent value="data">
+              <DataInspectionPanel
+                authenticated={authenticated}
+                preview={dataPreview}
+                adaptedRun={latestAdapted}
+                loading={previewLoading}
+                onLoad={() => void loadDataPreview()}
+              />
             </TabsContent>
             <TabsContent value="spec">
               <SpecificationPanel />
@@ -513,14 +597,26 @@ function MetricPanel({
   );
 }
 
-function Metric({ label, value }: { label: string; value?: number }) {
+function Metric({
+  label,
+  value,
+  format = "metric",
+}: {
+  label: string;
+  value?: number;
+  format?: "metric" | "integer";
+}) {
   return (
     <div className="rounded-lg border border-white/10 bg-background/60 p-3">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <p className="mt-1 text-2xl font-semibold">
-        {value === undefined ? "—" : formatMetric(value)}
+        {value === undefined
+          ? "—"
+          : format === "integer"
+            ? value.toLocaleString()
+            : formatMetric(value)}
       </p>
     </div>
   );
@@ -554,9 +650,7 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
               runs.map((run, index) => (
                 <TableRow key={`${run.trainingSource}-${run.testSetHash}-${index}`}>
                   <TableCell className="font-medium">
-                    {run.trainingSource === "indonesian_only"
-                      ? "Indonesian only"
-                      : "Adaption-adapted Indonesian"}
+                    {runLabel(run.trainingSource)}
                   </TableCell>
                   <TableCell>{formatMetric(run.metricValue)}</TableCell>
                   <TableCell>
@@ -580,9 +674,21 @@ function RunHistory({ runs, loading }: { runs: RunResult[]; loading: boolean }) 
   );
 }
 
+function runLabel(source: RunResult["trainingSource"]): string {
+  const labels: Record<RunResult["trainingSource"], string> = {
+    indonesian_only: "Legacy Indonesian only",
+    adaption_id_aug: "Legacy Adaption-adapted Indonesian",
+    paper_raw_full: "Paper raw full",
+    paper_raw_paired: "Paired raw",
+    adaption_adapted_only: "Adaption adapted-only",
+  };
+  return labels[source];
+}
+
 function ValidationPanel({ run }: { run?: RunResult }) {
   const validation = run?.validation;
   const adaption = run?.adaption;
+  const audit = run?.audit;
 
   return (
     <Card>
@@ -593,11 +699,23 @@ function ValidationPanel({ run }: { run?: RunResult }) {
           and test leakage.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-5 md:grid-cols-2">
+      <CardContent className="grid gap-5 lg:grid-cols-3">
         <div className="grid gap-3">
-          <Metric label="Requested" value={validation?.rowsRequested} />
-          <Metric label="Returned" value={validation?.rowsReturned} />
-          <Metric label="Passed" value={validation?.rowsPassedValidation} />
+          <Metric
+            label="Requested"
+            value={validation?.rowsRequested}
+            format="integer"
+          />
+          <Metric
+            label="Returned"
+            value={validation?.rowsReturned}
+            format="integer"
+          />
+          <Metric
+            label="Passed"
+            value={validation?.rowsPassedValidation}
+            format="integer"
+          />
         </div>
         <div className="grid gap-3">
           <div className="rounded-lg border border-white/10 bg-background/60 p-3">
@@ -621,9 +739,360 @@ function ValidationPanel({ run }: { run?: RunResult }) {
             </p>
           </div>
         </div>
+        <div className="grid gap-3">
+          <div className="rounded-lg border border-white/10 bg-background/60 p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Adaption accounting
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Uploaded{" "}
+              <span className="text-foreground">{audit?.uploadedRows ?? "—"}</span>
+              , ingested{" "}
+              <span className="text-foreground">{audit?.ingestedRows ?? "—"}</span>
+              , processed{" "}
+              <span className="text-foreground">{audit?.processedRows ?? "—"}</span>
+              , downloaded{" "}
+              <span className="text-foreground">{audit?.downloadedRows ?? "—"}</span>
+              .
+            </p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
+            <p className="font-medium">Parser audit</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge variant="outline">
+                fallback: {audit?.parserFallbackCount ?? "—"}
+              </Badge>
+              <Badge variant="outline">
+                label mismatch: {audit?.labelMismatchCount ?? "—"}
+              </Badge>
+              <Badge variant="outline">
+                raw matches: {audit?.exactRawMatchCount ?? "—"}
+              </Badge>
+            </div>
+            <p className="mt-2 text-muted-foreground">
+              {audit
+                ? `Shapes: ${formatCounts(audit.outputShapeCounts) || "none"}`
+                : "Waiting for audit"}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              {audit
+                ? `Parse: ${formatCounts(audit.parseStatusCounts) || "none"}`
+                : ""}
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
+}
+
+function DataInspectionPanel({
+  authenticated,
+  preview,
+  adaptedRun,
+  loading,
+  onLoad,
+}: {
+  authenticated: boolean;
+  preview: DatasetPreview | null;
+  adaptedRun?: RunResult;
+  loading: boolean;
+  onLoad: () => void;
+}) {
+  const setup = preview?.trainingSetup;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Rows3 className="size-5 text-primary" />
+            Data inspect
+          </CardTitle>
+          <CardDescription>
+            Compare the sampled raw training rows with rows that survived the
+            Adaption validation gate.
+          </CardDescription>
+        </div>
+        <Button
+          variant="secondary"
+          className="w-fit gap-2"
+          disabled={!authenticated || loading}
+          onClick={onLoad}
+        >
+          {loading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw className="size-4" />
+          )}
+          Load samples
+        </Button>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        {!authenticated ? (
+          <Alert>
+            <Lock className="size-4" />
+            <AlertTitle>Unlock required</AlertTitle>
+            <AlertDescription>
+              Dataset previews use the Modal runner and are gated behind the
+              demo admin password.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {preview ? (
+          <>
+            <div className="grid gap-3 md:grid-cols-4">
+              <Metric
+                label="Raw train rows"
+                value={preview.raw.rowCount}
+                format="integer"
+              />
+              <Metric
+                label="Adapted passed"
+                value={preview.adapted?.rowsPassedValidation}
+                format="integer"
+              />
+              <Metric
+                label="Test rows"
+                value={preview.testSet.rowCount}
+                format="integer"
+              />
+              <Metric
+                label="Adaption returned"
+                value={preview.adapted?.rowsReturned}
+                format="integer"
+              />
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-background/60 p-3 text-sm">
+              <div className="grid gap-2 md:grid-cols-2">
+                <p className="text-muted-foreground">
+                  Baseline trains on{" "}
+                  <span className="text-foreground">
+                    {setup?.baselineTrainText}
+                  </span>
+                  .
+                </p>
+                <p className="text-muted-foreground">
+                  Adaption trains on{" "}
+                  <span className="text-foreground">
+                    {setup?.adaptedTrainText}
+                  </span>
+                  .
+                </p>
+                <p className="text-muted-foreground">
+                  Head:{" "}
+                  <span className="text-foreground">
+                    {setup?.classifier}, budget {setup?.classifierMaxIter},
+                    seed {setup?.classifierRandomState}
+                  </span>
+                  .
+                </p>
+                <p className="text-muted-foreground">
+                  Early stopping:{" "}
+                  <span className="text-foreground">
+                    {setup?.earlyStopping
+                      ? `on${
+                          setup.earlyStoppingPatience
+                            ? `, patience ${setup.earlyStoppingPatience}`
+                            : ""
+                        }`
+                      : "off"}
+                  </span>
+                  . Fine-tuning:{" "}
+                  <span className="text-foreground">
+                    {setup?.fineTuning ? "on" : "off"}
+                  </span>
+                  .
+                </p>
+                <p className="text-muted-foreground">
+                  Loss and optimizer:{" "}
+                  <span className="text-foreground">
+                    {[setup?.loss, setup?.optimizer, setup?.scheduler]
+                      .filter(Boolean)
+                      .join(", ") || "not reported"}
+                  </span>
+                  .
+                </p>
+                <p className="text-muted-foreground">
+                  Decision threshold:{" "}
+                  <span className="text-foreground">
+                    {setup?.threshold ?? 0.5}
+                  </span>
+                  .
+                </p>
+              </div>
+              <Separator className="my-3" />
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">hash: {preview.testSet.hash.slice(0, 16)}</Badge>
+                <Badge variant="outline">
+                  raw labels: {formatCounts(preview.raw.labelCounts)}
+                </Badge>
+                {preview.adapted ? (
+                  <Badge variant="outline">
+                    drops: {formatCounts(preview.adapted.drops) || "none"}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    no Adaption dataset selected
+                  </Badge>
+                )}
+                {preview.adapted?.audit ? (
+                  <>
+                    <Badge variant="outline">
+                      fallback: {preview.adapted.audit.parserFallbackCount}
+                    </Badge>
+                    <Badge variant="outline">
+                      label mismatch: {preview.adapted.audit.labelMismatchCount}
+                    </Badge>
+                    <Badge variant="outline">
+                      shapes: {formatCounts(preview.adapted.audit.outputShapeCounts)}
+                    </Badge>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <Tabs defaultValue="raw" className="w-full">
+              <TabsList>
+                <TabsTrigger value="raw">Raw train</TabsTrigger>
+                <TabsTrigger value="adapted">Adaption output</TabsTrigger>
+              </TabsList>
+              <TabsContent value="raw">
+                <PreviewTable mode="raw" rows={preview.raw.rows} />
+              </TabsContent>
+              <TabsContent value="adapted">
+                {preview.adapted ? (
+                  <PreviewTable mode="adapted" rows={preview.adapted.rows} />
+                ) : (
+                  <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
+                    Run or load an Adaption result before inspecting adapted
+                    rows.
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </>
+        ) : (
+          <div className="rounded-lg border border-white/10 bg-background/50 p-8 text-center text-sm text-muted-foreground">
+            {adaptedRun?.adaption?.datasetId
+              ? "Load samples to compare raw and Adaption-passed rows."
+              : "Run Paper 500 proof first, then load samples for the paired inspection."}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PreviewTable({
+  mode,
+  rows,
+}: {
+  mode: "raw" | "adapted";
+  rows: DatasetPreview["raw"]["rows"];
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-white/10">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">#</TableHead>
+              <TableHead className="min-w-40">Source ID</TableHead>
+              <TableHead className="w-28">Label</TableHead>
+              <TableHead className="min-w-80">Raw original</TableHead>
+              <TableHead className="min-w-80">Paper-preprocessed raw</TableHead>
+              {mode === "adapted" ? (
+                <>
+                  <TableHead className="min-w-80">Adaption raw output</TableHead>
+                  <TableHead className="min-w-80">
+                    Paper-preprocessed adapted
+                  </TableHead>
+                  <TableHead className="min-w-32">Output</TableHead>
+                  <TableHead className="min-w-36">Parse</TableHead>
+                  <TableHead className="min-w-32">Generated label</TableHead>
+                  <TableHead className="w-28">Status</TableHead>
+                  <TableHead className="min-w-40">Drop reason</TableHead>
+                </>
+              ) : null}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={mode === "adapted" ? 12 : 5}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  No preview rows available
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => (
+                <TableRow key={`${mode}-${row.rowIndex}`}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {row.rowIndex}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {row.sourceId || "-"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{row.label}</Badge>
+                  </TableCell>
+                  <TableCell className="max-w-md whitespace-normal text-sm leading-6 text-muted-foreground">
+                    {row.originalText || row.text || "-"}
+                  </TableCell>
+                  <TableCell className="max-w-md whitespace-normal text-sm leading-6">
+                    {row.preprocessedOriginalText || row.text || "-"}
+                  </TableCell>
+                  {mode === "adapted" ? (
+                    <>
+                      <TableCell className="max-w-md whitespace-normal text-sm leading-6 text-muted-foreground">
+                        {row.adaptedTextRaw || row.adaptedText || "-"}
+                      </TableCell>
+                      <TableCell className="max-w-md whitespace-normal text-sm leading-6">
+                        {row.preprocessedAdaptedText ||
+                          row.adaptedText ||
+                          row.adaptedTextRaw ||
+                          "-"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.outputShape || "-"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.parseStatus || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {row.generatedLabel || "-"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={row.status === "passed" ? "default" : "outline"}
+                        >
+                          {row.status || "unknown"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.dropReason || "-"}
+                      </TableCell>
+                    </>
+                  ) : null}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+    </div>
+  );
+}
+
+function formatCounts(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(", ");
 }
 
 function SpecificationPanel() {

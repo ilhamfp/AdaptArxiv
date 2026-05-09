@@ -13,7 +13,7 @@ export async function setAdminSession(): Promise<void> {
   cookieStore.set(COOKIE_NAME, COOKIE_VALUE, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.VERCEL === "1",
     path: "/",
     maxAge: 60 * 60 * 8,
   });
