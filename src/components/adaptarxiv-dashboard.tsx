@@ -237,7 +237,7 @@ export function AdaptArxivDashboard() {
 
   return (
     <main className="min-h-screen bg-background">
-      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(42,211,176,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.05),transparent)]">
+      <section className="border-b border-dark-grey bg-[radial-gradient(circle_at_top_left,rgba(232,217,168,0.08),transparent_38%),linear-gradient(180deg,rgba(196,195,182,0.04),transparent)]">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-8 md:px-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
