@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "logo:build": "python3 scripts/generate_logo_kit.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

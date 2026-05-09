@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { DiamondButton } from "@/components/ui/diamond-button";
+import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 
 // ease-out-quad — Structured Money's signature easing for hero cadence
@@ -68,9 +69,10 @@ export function LandingHero() {
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="c-heading-xs font-serif text-black"
+          className="inline-flex text-black"
+          aria-label="AdaptArxiv"
         >
-          AdaptArxiv
+          <Logo className="h-7 w-auto" />
         </motion.span>
         <motion.div
           initial={{ opacity: 0, x: -30 }}
@@ -139,7 +141,7 @@ export function LandingHero() {
       >
         <motion.svg
           viewBox="0 0 1440 240"
-          preserveAspectRatio="xMidYEnd meet"
+          preserveAspectRatio="xMidYMax meet"
           initial={{ y: "100%" }}
           animate={{ y: "0%" }}
           transition={{ duration: 1.0, delay: 0.35, ease: EASE }}
