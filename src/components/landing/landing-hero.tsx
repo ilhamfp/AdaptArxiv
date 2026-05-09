@@ -140,7 +140,7 @@ export function LandingHero() {
           to the bottom edge as before. */}
       <div
         translate="no"
-        className="absolute inset-x-0 bottom-[24%] translate-y-[2%] sm:bottom-[6%] sm:translate-y-[-2%] z-10 pointer-events-none"
+        className="absolute inset-x-0 bottom-[22%] translate-y-[3%] sm:bottom-[3%] sm:translate-y-[5%] z-10 pointer-events-none"
       >
         <motion.svg
           viewBox="0 0 1440 400"
