@@ -32,7 +32,7 @@ image = (
 
 app = modal.App("adaptarxiv-runner")
 cache_volume = modal.Volume.from_name("adaptarxiv-cache", create_if_missing=True)
-RUNNER_REVISION = "dataset-tsv-v5"
+RUNNER_REVISION = "dataset-tsv-v6"
 
 
 class RunRequest(BaseModel):
@@ -124,7 +124,7 @@ def fastapi_app():
             "durationMs": elapsed_ms(started),
             "modalCallId": os.getenv("MODAL_TASK_ID"),
             "validation": {
-                "rowsRequested": request.max_rows,
+                "rowsRequested": int(adaption_result.get("rows_requested", request.max_rows)),
                 "rowsReturned": len(adaption_result["rows"]),
                 "rowsPassedValidation": len(adapted_rows),
                 "drops": drops,
@@ -477,7 +477,10 @@ def run_adaption(source_rows: list[dict[str, Any]], max_rows: int) -> dict[str, 
     if not dataset_id:
         raise RuntimeError("Adaption upload did not return a dataset id")
 
-    wait_for_adaption_ingestion(client, dataset_id)
+    ingested_rows = wait_for_adaption_ingestion(client, dataset_id)
+    rows_to_process = min(max_rows, ingested_rows)
+    if rows_to_process < 1:
+        raise RuntimeError("Adaption ingestion produced no processable rows")
     blueprint = (
         "Generate natural Indonesian sentiment-classification training examples. "
         "Preserve the original label. Do not invent conflicting sentiment. "
@@ -497,7 +500,7 @@ def run_adaption(source_rows: list[dict[str, Any]], max_rows: int) -> dict[str, 
             "length": "concise",
             "hallucination_mitigation": True,
         },
-        job_specification={"max_rows": max_rows},
+        job_specification={"max_rows": rows_to_process},
     )
     run_id = getattr(run, "run_id", None)
     wait_for_adaption_run(client, dataset_id)
@@ -508,12 +511,13 @@ def run_adaption(source_rows: list[dict[str, Any]], max_rows: int) -> dict[str, 
     return {
         "dataset_id": dataset_id,
         "run_id": run_id,
+        "rows_requested": rows_to_process,
         "rows": output_rows,
         **evaluation,
     }
 
 
-def wait_for_adaption_ingestion(client: Any, dataset_id: str) -> None:
+def wait_for_adaption_ingestion(client: Any, dataset_id: str) -> int:
     for _ in range(90):
         status = client.datasets.get_status(dataset_id)
         state = str(getattr(status, "status", "")).lower()
@@ -521,8 +525,9 @@ def wait_for_adaption_ingestion(client: Any, dataset_id: str) -> None:
             error = getattr(status, "error", None)
             message = getattr(error, "message", None) or "unknown ingestion error"
             raise RuntimeError(f"Adaption ingestion failed: {message}")
-        if getattr(status, "row_count", None) is not None:
-            return
+        row_count = getattr(status, "row_count", None)
+        if row_count is not None:
+            return int(row_count)
         time.sleep(2)
     raise TimeoutError("Adaption ingestion did not finish within 3 minutes")
 
