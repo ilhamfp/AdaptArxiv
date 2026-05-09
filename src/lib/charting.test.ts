@@ -65,7 +65,7 @@ describe("chart integrity", () => {
     });
   });
 
-  it("excludes legacy runs when paper-faithful runs are available", () => {
+  it("excludes legacy runs when paper-faithful runs are available, and hides the paired-raw control from the chart", () => {
     const bars = buildComparableBars([
       baseRun,
       paperRun,
@@ -83,7 +83,6 @@ describe("chart integrity", () => {
 
     expect(bars.bars.map((bar) => bar.trainingSource)).toEqual([
       "paper_raw_full",
-      "paper_raw_paired",
       "adaption_adapted_only",
     ]);
   });

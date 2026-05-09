@@ -18,8 +18,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#000000",
-  colorScheme: "dark",
+  themeColor: "#ebebeb",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -30,8 +30,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} dark h-full antialiased`}
-      style={{ colorScheme: "dark" }}
+      className={`${inter.variable} h-full antialiased`}
+      style={{ colorScheme: "light" }}
     >
       <head>
         <link
@@ -56,7 +56,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-black text-grey">
+      <body className="min-h-full flex flex-col bg-dust text-foreground">
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:bg-linen focus:text-black focus:px-4 focus:py-2 focus:c-link"

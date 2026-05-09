@@ -9,11 +9,7 @@ import { DiamondButton } from "@/components/ui/diamond-button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
-
-// ease-out-quad — Structured Money's signature easing for hero cadence
-const EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
-// ease-out-expo — DESIGN.md §7.1, the section-reveal cadence (slower, more cinematic)
-const EASE_EXPO: [number, number, number, number] = [0.19, 1, 0.22, 1];
+import { EASE, EASE_OUT_EXPO } from "@/lib/motion";
 
 /**
  * Per-letter clip-reveal helper. Each letter sits in an inline-block span and
@@ -62,10 +58,32 @@ function SplitLine({
 export function LandingHero() {
   const router = useRouter();
   const [arxivUrl, setArxivUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    router.push("/dashboard");
+    if (!arxivUrl) return;
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ arxivUrl }),
+      });
+      if (response.ok) {
+        router.push("/dashboard");
+        return;
+      }
+      // Auth required or any other failure → bounce to dashboard with the URL
+      // pre-filled so the user can sign in and start there.
+      const params = new URLSearchParams({ arxivUrl });
+      router.push(`/dashboard?${params.toString()}`);
+    } catch {
+      const params = new URLSearchParams({ arxivUrl });
+      router.push(`/dashboard?${params.toString()}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -117,7 +135,7 @@ export function LandingHero() {
         <motion.form
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.85, ease: EASE_EXPO }}
+          transition={{ duration: 0.9, delay: 0.85, ease: EASE_OUT_EXPO }}
           onSubmit={handleSubmit}
           className="mt-10 flex w-full max-w-2xl flex-col items-stretch gap-6 sm:mt-14 sm:flex-row sm:items-end sm:gap-10"
         >
@@ -134,8 +152,12 @@ export function LandingHero() {
             aria-label="arXiv paper URL"
             className="h-12 w-full rounded-none border-0 border-b border-dark-grey bg-transparent px-4 pb-3 text-[15px] font-sans text-black placeholder:text-black/45 shadow-none transition-colors duration-[var(--transition-duration)] ease-[var(--ease-out-quad)] focus-visible:border-black focus-visible:ring-0 sm:flex-1"
           />
-          <DiamondButton type="submit" variant="primary">
-            adapt
+          <DiamondButton
+            type="submit"
+            variant="primary"
+            disabled={submitting || !arxivUrl}
+          >
+            {submitting ? "starting" : "adapt"}
           </DiamondButton>
         </motion.form>
       </div>

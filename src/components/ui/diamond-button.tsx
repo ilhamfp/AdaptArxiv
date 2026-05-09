@@ -15,6 +15,7 @@ type DiamondButtonProps = {
   href?: string;
   onClick?: () => void;
   type?: "button" | "submit";
+  disabled?: boolean;
   children: React.ReactNode;
   className?: string;
   variant?: Variant;
@@ -35,6 +36,7 @@ export function DiamondButton({
   href,
   onClick,
   type = "button",
+  disabled = false,
   children,
   className,
   variant = "primary",
@@ -49,6 +51,7 @@ export function DiamondButton({
     "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-black",
     "select-none cursor-pointer overflow-hidden",
     VARIANT_CLASSES[variant],
+    disabled && "pointer-events-none opacity-60 cursor-not-allowed",
     className,
   );
 
@@ -90,13 +93,25 @@ export function DiamondButton({
 
   if (href) {
     return (
-      <Link href={href} className={classes} style={style} {...handlers}>
+      <Link
+        href={href}
+        className={classes}
+        style={style}
+        aria-disabled={disabled || undefined}
+        {...handlers}
+      >
         {inner}
       </Link>
     );
   }
   return (
-    <button type={type} className={classes} style={style} {...handlers}>
+    <button
+      type={type}
+      className={classes}
+      style={style}
+      disabled={disabled}
+      {...handlers}
+    >
       {inner}
     </button>
   );
