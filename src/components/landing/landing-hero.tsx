@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { DiamondButton } from "@/components/ui/diamond-button";
+import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 
 // ease-out-quad — Structured Money's signature easing for hero cadence
@@ -68,9 +69,10 @@ export function LandingHero() {
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="c-heading-xs font-serif text-black"
+          className="inline-flex text-black"
+          aria-label="AdaptArxiv"
         >
-          AdaptArxiv
+          <Logo className="h-7 w-auto" />
         </motion.span>
         <motion.div
           initial={{ opacity: 0, x: -30 }}
@@ -138,11 +140,11 @@ export function LandingHero() {
           to the bottom edge as before. */}
       <div
         translate="no"
-        className="absolute inset-x-0 bottom-[20%] translate-y-[4%] sm:bottom-0 sm:translate-y-[12%] z-10 pointer-events-none"
+        className="absolute inset-x-0 bottom-[22%] translate-y-[3%] sm:bottom-[3%] sm:translate-y-[5%] z-10 pointer-events-none"
       >
         <motion.svg
-          viewBox="0 0 1440 350"
-          preserveAspectRatio="xMidYEnd meet"
+          viewBox="0 0 1440 400"
+          preserveAspectRatio="xMidYMax meet"
           initial={{ y: "100%" }}
           animate={{ y: "0%" }}
           transition={{ duration: 1.0, delay: 0.35, ease: EASE }}
@@ -153,10 +155,10 @@ export function LandingHero() {
             x="50%"
             y="78%"
             textAnchor="middle"
-            textLength="1380"
+            textLength="1410"
             lengthAdjust="spacingAndGlyphs"
             fontFamily="var(--font-serif), 'Times New Roman', serif"
-            fontSize="280"
+            fontSize="310"
             fontWeight="400"
           >
             AdaptArxiv
@@ -172,7 +174,7 @@ export function LandingHero() {
           drop the towers below the wordmark's top so the leading "A" is
           visible. Framer's y animation lives on the inner motion.div so the
           two transforms don't collide. */}
-      <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] translate-y-[36%] sm:translate-y-[24%] pointer-events-none">
+      <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] translate-y-[36%] sm:translate-y-[32%] pointer-events-none">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
